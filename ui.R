@@ -1,14 +1,45 @@
 shinyUI(navbarPage("HLMr", theme = "bootstrap.css",
-	tabPanel("File",
+	
+  tabPanel("File/Data",
+    
     tabsetPanel("Load data or model",
-  		tabPanel("New Model",
-  			tags$p("Load data widget goes here        Model type radio button goes here")
+  		
+      tabPanel("New Model",
+  			tags$br(),
+        tags$br(),
+        fluidRow(
+          column(4, offset = 1,
+            fileInput('upload_data', 'Upload data for model',
+      			          accept = c(
+      			            'text/csv',
+      			            'text/comma-separated-values',
+      			            'text/tab-separated-values',
+      			            'text/plain',
+      			            '.csv',
+      			            '.tsv',
+                        '.sav',
+                        '.dat')
+            )
+          ),
+          column(3, offset = 2,
+            numericInput('hlm_k', label = "HLM-k (order of model)", value = 2, min = 1, max = 6, step = 1)
+          )
+        ),
+        fluidRow(
+          column(4, offset = 1,
+            uiOutput("levelIDs")
+          )
+        )
   		),
-  		tabPanel("Existing Model",
+  		tabPanel("Load Existing Model",
   			tags$p("Widget for loading .RDS file with old model goes here")
+  		),
+  		tabPanel("Data",
+  		    tags$p("Summary statistics for loaded data go here.")
   		)
     )
 	),
+
 	tabPanel("Specify Model",
 		fluidRow(
 			column(12, tags$p("Dynamic data.table with model, covariates, intercept, and fixed effects input widgets here"))
@@ -17,6 +48,7 @@ shinyUI(navbarPage("HLMr", theme = "bootstrap.css",
 			column(12, tags$p("Display mixed model here, below the big data.table above."))
 		)
 	),
+
 	tabPanel("Other Settings",
 	  tabsetPanel("Load data or model",
   		tabPanel("Iteration Settings",
@@ -33,22 +65,23 @@ shinyUI(navbarPage("HLMr", theme = "bootstrap.css",
   		)
 	  )
 	),
+
 	tabPanel("Run",
 		fluidRow(
+      tags$br(),
 			column(12,
 				fluidRow(
-					column(6,
-						bsButton("run_button", label = "RUN", style = "success", type = "action"),
-						tags$style(type="text/css", "#run_button  { vertical-align: middle;}")
+					column(4, offset = 3,
+						bsButton("run_button", label = "RUN", style = "success", type = "action", width = '100px')
 					),
-					column(6,
-						checkboxInput("save_box", label = "Save", value = T, width = '400px'),
-						tags$style(type="text/css", "#save_box { text-align:center; display: block;}")
+					column(2,
+						checkboxInput("save_box", label = "Save", value = T, width = '400px')
 					)
 				)
 			)
 		)
 	),
+  
 	tabPanel("Output",
 		tags$p("Output to display here. Not sure what output will look like yet.")
 	)

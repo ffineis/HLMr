@@ -1,4 +1,5 @@
 shinyUI(navbarPage("HLMr", theme = "bootstrap.css",
+  # withMathJax(),
 	
   tabPanel("File/Data",
     
@@ -25,9 +26,14 @@ shinyUI(navbarPage("HLMr", theme = "bootstrap.css",
             numericInput('hlm_k', label = "HLM-k (order of model)", value = 2, min = 1, max = 6, step = 1)
           )
         ),
+        tags$br(),
+        tags$br(),
         fluidRow(
           column(4, offset = 1,
             uiOutput("levelIDs")
+          ),
+          column(4, offset = 2,
+            uiOutput("na_opt")
           )
         )
   		),
@@ -35,15 +41,19 @@ shinyUI(navbarPage("HLMr", theme = "bootstrap.css",
   			tags$p("Widget for loading .RDS file with old model goes here")
   		),
   		tabPanel("Data",
-  		    tags$p("Summary statistics for loaded data go here.")
+  		    tags$br(),
+          dataTableOutput("numeric_summary_dt")
   		)
     )
 	),
 
 	tabPanel("Specify Model",
 		fluidRow(
-			column(12, tags$p("Dynamic data.table with model, covariates, intercept, and fixed effects input widgets here"))
+			column(12, tags$p("Dynamic data.table with model, covariates, intercept, and fixed effects input widgets here")),
+      ## See if I can render mathJax latex... Check. (Will need to construct data.table of input widgets.)
+      uiOutput("ex3")
 		),
+    tags$br(),
 		fluidRow(
 			column(12, tags$p("Display mixed model here, below the big data.table above."))
 		)

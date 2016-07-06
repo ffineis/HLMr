@@ -48,15 +48,36 @@ shinyUI(navbarPage("HLMr", theme = "bootstrap.css",
 	),
 
 	tabPanel("Specify Model",
-		fluidRow(
-			column(12, tags$p("Dynamic data.table with model, covariates, intercept, and fixed effects input widgets here")),
+
+    tags$h3("Outcome Variable"),
+    fluidRow(
+      column(4, offset = 1,
+        uiOutput("outcome")
+      )
+    ),
+    fluidRow(
+      column(4, offset = 1,
+        checkboxInput("edit_outcome",
+                      "Enter outcome variable editor",
+                      value = F)
+      )
+    ),
+    fluidRow(
+      column(4, offset = 1,
+        conditionalPanel("input.edit_outcome === true",
+          selectInput("outcome_var_options",
+                      "Select Outcome Variable Distribution",
+                      choices = c("Normal (Continuous)", "Bernoulli (0 or 1)", "Poisson", "Binomial", "Multinomial", "Ordinal"),
+                      multiple = F)
+        )
+      )
+    ),
       ## See if I can render mathJax latex... Check. (Will need to construct data.table of input widgets.)
-      uiOutput("ex3")
-		),
+      # uiOutput("ex3")
     tags$br(),
-		fluidRow(
-			column(12, tags$p("Display mixed model here, below the big data.table above."))
-		)
+    fluidRow(
+      column(12, tags$p("Display mixed model here, below the big data.table above."))
+    )
 	),
 
 	tabPanel("Other Settings",

@@ -7,6 +7,8 @@ library(data.table)
 shinyServer(function(input, output, session) {
 	rVals <- reactiveValues(DT = NULL)
 
+	##----------------------- FILE/DATA ----------------------##
+	
 	## LOAD IN DATA FILE.
 	observeEvent(input$upload_data, {
 
@@ -52,28 +54,47 @@ shinyServer(function(input, output, session) {
 			setnames(numeric_summary_dt, c("Variable", "NA count", "Min", "25% quantile", "Median", "75% quantile", "Max"))
 
 			numeric_summary_dt
-		}, options = list(searching = FALSE))
+			},
+			options = list(searching = FALSE)
+		)
 	})
   
-  ## RENDER LEVEL IDENTIFIER VARS.
-  output$levelIDs <- renderUI({
-    lapply(1:input$hlm_k, function(i){
-      selectizeInput(inputId = paste0("level_id_", i),
-                     label = paste("Level", i, "ID variable"),
-                     choices = names(rVals$DT),
-                     multiple = F)
-    })
-  })
+	## RENDER LEVEL IDENTIFIER VARS.
+	output$levelIDs <- renderUI({
+		lapply(1:input$hlm_k, function(i){
+		  selectizeInput(inputId = paste0("level_id_", i),
+		                 label = paste("Level", i, "ID variable"),
+		                 choices = names(rVals$DT),
+		                 multiple = F)
+		})
+	})
 
-  ## RENDER 'SPECIFY MODEL' TABLE.
-  # output$specify_model_dt <- renderDataTable({
-  # 	data.table(model = withMathJax(sprintf("\\beta\\")))
-  # }, options = list(searching = FALSE))
-  output$ex3 <- renderUI({ ## NOTE: MUST USE withMathJax WITH renderUI!!! See http://shiny.rstudio.com/gallery/mathjax.html.
-    withMathJax(
-      helpText('The busy Cauchy distribution
-               $$\\frac{1}{\\pi\\gamma\\,\\left[1 +
-               \\left(\\frac{x-x_0}{\\gamma}\\right)^2\\right]}\\!$$'))
-  })
+
+	##----------------------- SPECIFY MODEL ----------------------##
+	obs <- observe({
+		output$outcome <- renderUI({
+			selectizeInput(inputId = "outcome_var",
+							label = "",					## No widget label to avoid clutter (already using h3 header)
+							choices = names(rVals$DT),
+							multiple = F)
+		})
+
+		# output$covariate_selection <- renderUI({
+		# 	lapply(1:input$hlm_k, function(i){
+		# 		selectizeInput(inputId = paste0("level_", i, "_covars"),
+		# 						label = paste("Level", i, "Covariates"),
+		# 						choices = names(rVals$DT))
+
+		# 	})
+		# })
+	})
+
+	## RENDER 'SPECIFY MODEL' TABLE.
+	output$ex3 <- renderUI({ ## NOTE: MUST USE withMathJax WITH renderUI!!! See http://shiny.rstudio.com/gallery/mathjax.html.
+	withMathJax(
+	  helpText('The busy Cauchy distribution
+	           $$\\frac{1}{\\pi\\gamma\\,\\left[1 +
+	           \\left(\\frac{x-x_0}{\\gamma}\\right)^2\\right]}\\!$$'))
+	})
 
 })

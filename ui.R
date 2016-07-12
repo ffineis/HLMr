@@ -49,21 +49,26 @@ shinyUI(navbarPage("HLMr", theme = "bootstrap.css",
 
 	tabPanel("Specify Model",
 
+    tags$h3("Mixed Model"),
+    fluidRow(
+      column(3, offset = 1)
+    ),
+
     tags$h3("Outcome Variable"),
     fluidRow(
-      column(4, offset = 1,
+      column(3, offset = 1,
         uiOutput("outcome")
       )
     ),
     fluidRow(
-      column(4, offset = 1,
+      column(3, offset = 1,
         checkboxInput("edit_outcome",
                       "Enter outcome variable editor",
                       value = F)
       )
     ),
     fluidRow(
-      column(4, offset = 1,
+      column(3, offset = 1,
         conditionalPanel("input.edit_outcome === true",
           selectInput("outcome_var_options",
                       "Select Outcome Variable Distribution",
@@ -72,11 +77,13 @@ shinyUI(navbarPage("HLMr", theme = "bootstrap.css",
         )
       )
     ),
-      ## See if I can render mathJax latex... Check. (Will need to construct data.table of input widgets.)
-      # uiOutput("ex3")
-    tags$br(),
+    
+    ## TODO: build Level-1 covariate config table
+    tags$h3("Level 1 Model"),
     fluidRow(
-      column(12, tags$p("Display mixed model here, below the big data.table above."))
+      # tags$head(tags$style(HTML("#level_1_options_table tr.selected {background-color:red}"))),
+      column(3, offset = 1, uiOutput("select_level_1_vars"))
+      , column(6, uiOutput("level_1_options"))
     )
 	),
 

@@ -2,12 +2,31 @@ library(shiny)
 library(shinyBS)
 library(foreign)
 library(data.table)
+library(DT)
 
 
 shinyServer(function(input, output, session) {
+
+	##------------------ INITIALIZE USEFUL STORAGE/FUNS -----------------##
+
 	rVals <- reactiveValues(DT = NULL)
 
-	##----------------------- FILE/DATA ----------------------##
+	shinyInput = function(FUN, len, id, ...) { 
+      inputs = character(len) 
+      for (i in seq_len(len)) { 
+        inputs[i] = as.character(FUN(paste0(id, i), label = NULL, ...)) 
+      } 
+      inputs 
+    } 
+
+    shinyValue = function(id, len) { 
+      unlist(lapply(seq_len(len), function(i) { 
+        value = input[[paste0(id, i)]] 
+        if (is.null(value)) NA else value 
+      })) 
+    } 
+
+	##----------------------------- FILE/DATA ----------------------------##
 	
 	## LOAD IN DATA FILE.
 	observeEvent(input$upload_data, {
@@ -55,7 +74,7 @@ shinyServer(function(input, output, session) {
 
 			numeric_summary_dt
 			},
-			options = list(searching = FALSE)
+			options = list(dom = "t")
 		)
 	})
   
@@ -70,23 +89,40 @@ shinyServer(function(input, output, session) {
 	})
 
 
-	##----------------------- SPECIFY MODEL ----------------------##
+	##------------------------------ SPECIFY MODEL --------------------------##
 	obs <- observe({
 		output$outcome <- renderUI({
 			selectizeInput(inputId = "outcome_var",
 							label = "",					## No widget label to avoid clutter (already using h3 header)
 							choices = names(rVals$DT),
+							selected = names(rVals$DT)[1],
 							multiple = F)
 		})
 
-		# output$covariate_selection <- renderUI({
-		# 	lapply(1:input$hlm_k, function(i){
-		# 		selectizeInput(inputId = paste0("level_", i, "_covars"),
-		# 						label = paste("Level", i, "Covariates"),
-		# 						choices = names(rVals$DT))
+		output$select_level_1_vars <- renderUI({
+			selectizeInput(inputId = "level_1_vars",
+							label = "Covariates",
+							choices = c("Intercept", setdiff(names(rVals$DT), input$outcome_var)), ## Disallow user from picking outcome variable as a predictor.
+							selected = "Intercept",
+							multiple = T)
+		})
+	})
 
-		# 	})
-		# })
+	obs <- observeEvent(input$level_1_vars, {
+ 
+		output$level_1_options <- renderUI({
+			lapply(c(1:length(input$level_1_vars)), function(x){
+				if(input$level_1_vars[x] == "Intercept"){
+					NULL
+				} else {
+					radioButtons(paste0("level_1_centering_", x),
+								label = input$level_1_vars[x],
+								choices = c("uncentered", "group centered", "grand centered"),
+								selected = "uncentered",
+								inline = T)	
+				}
+			})
+		})
 	})
 
 	## RENDER 'SPECIFY MODEL' TABLE.

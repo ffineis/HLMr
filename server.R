@@ -125,12 +125,28 @@ shinyServer(function(input, output, session) {
 		})
 	})
 
-	## RENDER 'SPECIFY MODEL' TABLE.
-	output$ex3 <- renderUI({ ## NOTE: MUST USE withMathJax WITH renderUI!!! See http://shiny.rstudio.com/gallery/mathjax.html.
-	withMathJax(
-	  helpText('The busy Cauchy distribution
-	           $$\\frac{1}{\\pi\\gamma\\,\\left[1 +
-	           \\left(\\frac{x-x_0}{\\gamma}\\right)^2\\right]}\\!$$'))
-	})
+	## RENDER MIXED/COMBINED MODEL
+	obs <- observe({
 
+		if(!is.null(input$outcome_var)){
+			outcome <- paste0(input$outcome_var, "_{ij} ")
+		} else{
+			outcome <- NULL
+		}
+		
+		if("Intercept" %in% input$level_1_vars){
+			intercept <- "\\beta_{0j}"
+		} else{
+			intercept <- NULL
+		}
+
+		output$MixedModel <- renderUI({ ## NOTE: MUST USE withMathJax WITH renderUI!!! See http://shiny.rstudio.com/gallery/mathjax.html.
+			withMathJax(
+			  helpText(paste0(
+			           "$$", outcome, " = ", intercept, "$$"
+			           	)
+			  )
+			 )
+		})
+	})
 })

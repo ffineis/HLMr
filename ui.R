@@ -1,8 +1,8 @@
 shinyUI(navbarPage("HLMr", theme = "bootstrap.css",
-  # withMathJax(),
 	
   tabPanel("File/Data",
-    
+    withMathJax(),
+
     tabsetPanel("Load data or model",
   		
       tabPanel("New Model",
@@ -51,7 +51,7 @@ shinyUI(navbarPage("HLMr", theme = "bootstrap.css",
 
     tags$h3("Mixed Model"),
     fluidRow(
-      column(3, offset = 1)
+      column(3, offset = 1, uiOutput("MixedModel"))
     ),
 
     tags$h3("Outcome Variable"),

@@ -78,13 +78,19 @@ shinyUI(navbarPage("HLMr", theme = "bootstrap.css",
       )
     ),
     
-    ## TODO: build Level-1 covariate config table
     tags$h3("Level 1 Model"),
     fluidRow(
-      # tags$head(tags$style(HTML("#level_1_options_table tr.selected {background-color:red}"))),
       column(3, offset = 1, uiOutput("select_level_1_vars"))
-      , column(6, uiOutput("level_1_options"))
+      ,column(6, uiOutput("level_1_options"))
+    ),
+
+    tags$h3("Level 2 Model Selection"), ## Make this uiOutput...
+    fluidRow(
+      # column(10, offset = 1, dataTableOutput("level_2_options"))
+      column(3, offset = 1, uiOutput("level_2_covariates"))
+      ,column(4, uiOutput("level_2_randomEffects"))
     )
+    tags$h3("Level 2 Models List:")
 	),
 
 	tabPanel("Other Settings",

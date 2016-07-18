@@ -4,6 +4,10 @@ library(foreign)
 library(data.table)
 library(DT)
 
+## TODO:
+## - organize level-1, centering, level-2 covariates, random effect selection into generalizable nested list
+## - Ensure that mixed model prints as expected
+
 
 shinyServer(function(input, output, session) {
 
@@ -72,9 +76,12 @@ shinyServer(function(input, output, session) {
 			numeric_summary_dt <- data.table(numeric_vars, NA_cts, mn, q25, q50, q75, mx)
 			setnames(numeric_summary_dt, c("Variable", "NA count", "Min", "25% quantile", "Median", "75% quantile", "Max"))
 
-			numeric_summary_dt
-			},
-			options = list(dom = "t")
+			dat <- datatable(numeric_summary_dt
+				,rownames = FALSE
+				,options = list(dom = "t")) %>% formatStyle(names(numeric_summary_dt), target = "row", backgroundColor = "#222222")
+
+			return(dat)
+			}
 		)
 	})
   
@@ -110,18 +117,82 @@ shinyServer(function(input, output, session) {
 
 	obs <- observeEvent(input$level_1_vars, {
  
+ 		## LEVEL 1 COVARIATE CENTERING OPTIONS
 		output$level_1_options <- renderUI({
 			lapply(c(1:length(input$level_1_vars)), function(x){
 				if(input$level_1_vars[x] == "Intercept"){
 					NULL
 				} else {
-					radioButtons(paste0("level_1_centering_", x),
-								label = input$level_1_vars[x],
-								choices = c("uncentered", "group centered", "grand centered"),
-								selected = "uncentered",
-								inline = T)	
+					radioButtons(paste0("level_1_centering_", level_1_vars[x])
+								,label = input$level_1_vars[x]
+								,choices = c("uncentered", "group centered", "grand centered")
+								,selected = "uncentered"
+								,inline = T)	
 				}
 			})
+		})
+
+		## LEVEL 2 COVARIATE SELECTION
+		output$level_2_covariates <- renderUI({
+			if("Intercept" %in% input$level_1_vars){
+				l1 <- lapply(c(1), function(x){
+
+						selectizeInput("level_2_covariate_Intercept"
+							,label = HTML("&beta;-0j covariates:")
+							,choices = paste0(rep(names(rVals$DT), each = 2), c(": uncentered", ": grand centered"))
+							,selected = NULL
+							,multiple = T)
+						})
+			} else{
+				l1 <- NULL
+			}
+
+			nonIntercept_vars <- setdiff(input$level_1_vars, "Intercept")
+			if(length(nonIntercept_vars) > 0){
+				l2 <- lapply(1:length(nonIntercept_vars), function(x){
+						selectizeInput(paste0("level_2_covariate_", nonIntercept_vars[x])
+							,label = HTML(paste0("&beta;-", x, "j covariates:"))
+							,choices = paste0(rep(names(rVals$DT), each = 2), c(": uncentered", ": grand centered"))
+							,selected = NULL
+							,multiple = T)
+						})
+			} else{
+				l2 <- NULL
+			}
+
+			l <- append(l1, l2)
+			l
+		})
+
+		## LEVEL 2 RANDOM EFFECT CHOICE
+		output$level_2_randomEffects <- renderUI({
+			if("Intercept" %in% input$level_1_vars){
+				l1 <- lapply(c(1), function(x){
+						div(style="height: 65px;",
+							checkboxInput("level_2_randomEffect_Intercept"
+								,label = HTML("&beta;-0j:&nbsp;&nbsp; Has random effect?")
+								,value = T)
+							)
+						})
+			} else{
+				l1 <- NULL
+			}
+
+			nonIntercept_vars <- setdiff(input$level_1_vars, "Intercept")
+			if(length(nonIntercept_vars) > 0){
+				l2 <- lapply(1:length(nonIntercept_vars), function(x){
+						div(style="height: 65px;",
+							checkboxInput(paste0("level_2_randomEffect_", nonIntercept_vars[x])
+								,label = HTML(paste0("&beta;-", x, "j:&nbsp;&nbsp; Has random effect?"))
+								,value = T)
+							)
+						})
+			} else{
+				l2 <- NULL
+			}
+
+			l <- append(l1, l2)
+			l
 		})
 	})
 
@@ -140,6 +211,27 @@ shinyServer(function(input, output, session) {
 			intercept <- NULL
 		}
 
+		## Need to better organize a nested list of level-1 covariates, centering options, level-2 covariates, and rand effects
+		nonIntercept_vars <- setdiff(input$level_1_vars, "Intercept")
+		level_1_centeringVec <- input[[grep(names(input), "level_1_centering_", value = T)]]
+		covars <- NULL
+		if(length(nonIntercept_vars) > 0){
+			for(i in 1:length(nonIntercept_vars)){
+				# covars <- c(covars, paste0("\\beta_{", i, "j}")
+				newCovar_name <- nonIntercept_vars[i]
+				centering_opt <- grep(newCovar_name, level_1_centeringVec, value = T)
+				if(grepl("uncentered", centering_opt)){
+					newCovar_exp <- paste0("\\beta_{", i, "j}(", newCovar_name, "_{ij})")
+				}
+				if(grepl("group centered", centering_opt)){
+					newCovar_exp <- paste0("\\beta_{", i, "j}(", newCovar_name, "- \\bar{", newCovar_name, "}_{\\cdot j})")
+				}
+				if(grepl("grand centered", centering_opt)){
+					newCovar_exp <- paste0("\\beta_{", i, "j}(", newCovar_name, "- \\bar{", newCovar_name, "}_{\\cdot \\cdot})")
+				}
+			}
+		}
+
 		output$MixedModel <- renderUI({ ## NOTE: MUST USE withMathJax WITH renderUI!!! See http://shiny.rstudio.com/gallery/mathjax.html.
 			withMathJax(
 			  helpText(paste0(
@@ -150,3 +242,53 @@ shinyServer(function(input, output, session) {
 		})
 	})
 })
+
+
+
+
+
+##---------------------------------------------------------------------------------------##
+##										DEPRECATED CODE									 ##
+##---------------------------------------------------------------------------------------##
+
+## ->> Attempting to put greek letters in a datatable (also includes column of selectizeInput widgets)
+		# output$level_2_options <- renderDataTable({
+
+		# 	level_1_vars <- NULL
+		# 	if("Intercept" %in% input$level_1_vars){
+		# 		# level_1_vars <- c(level_1_vars, HTML("$$ \\beta_{0j} $$"))
+		# 		level_1_vars <- c(level_1_vars, "$$ \\beta_{0j} $$")
+		# 	}
+			
+		# 	nonIntercept_vars <- setdiff(input$level_1_vars, "Intercept")
+		# 	if(length(nonIntercept_vars) > 0){
+		# 		for(i in 1:length(nonIntercept_vars)){
+		# 			## Note: concatenating HMTL objects together renders a character vector, not a vector of HTML objects.
+		# 			level_1_vars <- c(level_1_vars, paste0("$$ \\beta_{", i, "j} $$"))
+		# 		}
+		# 	}
+
+		# 	level_2_options_table <- data.frame(Coefficient = rep(NA, length(level_1_vars))
+		# 										,Covariates = shinyInput(selectizeInput
+		# 											,id = "level_2_covariate_"
+		# 											,len = length(input$level_1_vars)
+		# 											,choices = c(setdiff(names(rVals$DT), isolate(input$outcome_var)))
+		# 											,multiple = T
+		# 											)
+  # 												,stringsAsFactors = FALSE
+  # 												)
+		# 	for(i in 1:nrow(level_2_options_table)){
+		# 		level_2_options_table$Coefficient[i] <- HTML(level_1_vars[i])
+		# 	}
+
+		# 	dat <- datatable(level_2_options_table
+		# 					,rownames = FALSE
+		# 					,escape = FALSE
+		# 					,options = list(dom = "t"
+		# 									,preDrawCallback = JS('function() { Shiny.unbindAll(this.api().table().node()); }') 
+	 #  										,drawCallback = JS('function() { Shiny.bindAll(this.api().table().node()); } ')
+	 #  										)) %>% formatStyle(names(level_2_options_table), target = "row", backgroundColor = "#222222")
+			
+		# 	return(dat)
+		# 	}
+		# )

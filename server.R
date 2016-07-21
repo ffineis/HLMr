@@ -5,8 +5,8 @@ library(data.table)
 library(DT)
 
 ## TODO:
-## - Determine best way to print models from individual levels.
-## - Get UI to print out for k >= 3
+## - Determine best way to print models of individual coefficients.
+## - Make UI for level k dependent on that of level k-1
 ## - Format mixed model now that coffiecient models can be [somewhat stored] in GatherCovarsHLM.
 
 shinyServer(function(input, output, session) {
@@ -30,19 +30,30 @@ shinyServer(function(input, output, session) {
 	  })) 
 	} 
 
-	## Make list of selectInputs for covariate selection
+	## Make list of selectInputs for covariate selection at each level.
 	MakeCovarSelection <- function(level, isTerminal = F){
-		print(paste("Making covariate selection UI for level = ", level))
+		if(level < 2){stop("Do not apply this function to level 1!")}
+		# print(paste("Making covariate selection UI for level = ", level))
 		
 		## Outline covariate choices for higher-level models.
 		if(isTerminal){
-			choices <- c("Intercept", paste0(rep(names(rVals$DT), each = 2), c(": uncentered", ": grand centered")))
+			choices <- c("Intercept", paste0(rep(names(rVals$DT), each = 2), c("__uncentered", "__grand_centered")))
 		} else{
-			choices <- c("Intercept", paste0(rep(names(rVals$DT), each = 3), c(": uncentered", ": group centered", ": grand centered")))
+			choices <- c("Intercept", paste0(rep(names(rVals$DT), each = 3), c("__uncentered", "__group_centered", "__grand_centered")))
 		}
 
 		output[[paste0("level_",level,"_covariates")]] <- renderUI({
-			if("Intercept" %in% isolate(input[[paste0("level_",level-1, "_vars")]])){
+
+			## If level > 2, we store each coefficient's model separately, so need to aggregate all level-k coefficients separately.
+			if(level > 2){
+				covariate_names <- grep(paste0("level_", level-1, "_var_"), names(input), value = T)
+				covariate_names <- as.character(sapply(covariate_names, function(x){input[[x]]}))
+			## If level == 1, all coefficients are stored in one input widget.
+			} else{
+				covariate_names <- input[[paste0("level_",level-1, "_vars")]]
+			}
+
+			if("Intercept" %in% covariate_names){
 				l1 <- lapply(c(1), function(x){
 
 						interceptLabel <- letters[9:(9 + rVals$k - 1)]
@@ -58,7 +69,7 @@ shinyServer(function(input, output, session) {
 			} else{
 				l1 <- NULL
 			}
-			nonIntercept_vars <- setdiff(isolate(input[[paste0("level_",level-1, "_vars")]]), "Intercept")
+			nonIntercept_vars <- setdiff(covariate_names, "Intercept")
 			if(length(nonIntercept_vars) > 0){
 				l2 <- lapply(1:length(nonIntercept_vars), function(x){
 
@@ -66,8 +77,8 @@ shinyServer(function(input, output, session) {
 						coefLabel[1:(level-1)] <- x
 						coefLabel <- paste0(coefLabel, collapse = "")
 						
-						selectizeInput(paste0("level_",level,"_var_", nonIntercept_vars[x])
-							,label = HTML(paste0("&beta;-", coefLabel, " covariates:"))
+						selectizeInput(paste0("level_",level,"_var_", nonIntercept_vars[x]) ## Each level-k (k>1) covariate stored separately
+							,label = HTML(paste0("&beta;-", coefLabel, " covariates:"))		## as "level_k_var_[name]"
 							,choices = choices
 							,selected = "Intercept"
 							,multiple = T)
@@ -83,14 +94,25 @@ shinyServer(function(input, output, session) {
 
 	## Make list of checkboxInputs for random effect selection
 	MakeRandomEffectSelection <- function(level){
+		if(level < 2){stop("Do not apply this function to level 1!")}
 		print(paste("Making random effect selection UI for level = ", level))
 
 		output[[paste0("level_", level, "_randomEffects")]] <- renderUI({
-			if("Intercept" %in% input[[paste0("level_", level-1, "_vars")]]){
+
+			## If level > 2, we store each coefficient's model separately, so need to aggregate all level-k coefficients separately.
+			if(level > 2){
+				covariate_names <- grep(paste0("level_", level-1, "_var_"), names(input), value = T)
+				covariate_names <- as.character(sapply(covariate_names, function(x){input[[x]]}))
+			## If level == 1, all coefficients are stored in one input widget.
+			} else{
+				covariate_names <- input[[paste0("level_",level-1, "_vars")]]
+			}
+
+			if("Intercept" %in% covariate_names){
 				l1 <- lapply(c(1), function(x){
 						div(style="height: 65px;",
 							checkboxInput(paste0("level_", level, "_randomEffect_Intercept")
-								,label = HTML("&beta;-0j:&nbsp;&nbsp; Has random effect?")
+								,label = HTML("Has random effect?")
 								,value = T)
 							)
 						})
@@ -98,12 +120,12 @@ shinyServer(function(input, output, session) {
 				l1 <- NULL
 			}
 
-			nonIntercept_vars <- setdiff(input[[paste0("level_", level-1, "_vars")]], "Intercept")
+			nonIntercept_vars <- setdiff(covariate_names, "Intercept")
 			if(length(nonIntercept_vars) > 0){
 				l2 <- lapply(1:length(nonIntercept_vars), function(x){
 						div(style="height: 65px;",
 							checkboxInput(paste0("level_", level, "_randomEffect_", nonIntercept_vars[x])
-								,label = HTML(paste0("&beta;-", x, "j:&nbsp;&nbsp; Has random effect?"))
+								,label = HTML(paste0("Has random effect?"))
 								,value = T)
 							)
 						})
@@ -198,80 +220,109 @@ shinyServer(function(input, output, session) {
 		output$select_level_1_vars <- renderUI({
 			selectizeInput(inputId = "level_1_vars",
 							label = "Covariates",
-							choices = c("Intercept", setdiff(names(rVals$DT), input$outcome_var)), ## Disallow user from picking outcome variable as a predictor.
+							choices = c("Intercept"
+											,paste0(rep(setdiff(names(rVals$DT), input$outcome_var), each = 3)
+													, c("__uncentered", "__group_centered", "__grand_centered"))
+										), ## Disallow user from picking outcome variable as a predictor.
 							selected = "Intercept",
 							multiple = T)
 		})
 	})
 
 	obs <- observeEvent(input$level_1_vars, {
- 
-		## LEVEL 1 COVARIATE CENTERING OPTIONS
-		output$level_1_options <- renderUI({
-			lapply(c(1:length(input$level_1_vars)), function(x){
-				if(input$level_1_vars[x] == "Intercept"){
-					NULL
-				} else {
-					radioButtons(paste0("level_1_centering_", level_1_vars[x])
-								,label = input$level_1_vars[x]
-								,choices = c("uncentered", "group centered", "grand centered")
-								,selected = "uncentered"
-								,inline = T)	
-				}
-			})
-		})
 
-		## LEVEL 2 COVARIATE SELECTION
-		MakeCovarSelection(level = 2, 2==input$hlm_k)
-		## LEVEL 2 RANDOM EFFECT CHOICE
-		MakeRandomEffectSelection(level = 2)
+		## LEVEL k COVARIATE SELECTION, RANDOM EFFECT CHOICE
+		if(input$hlm_k >= 2){
+			for(k in 2:input$hlm_k){
+				if(k > 2){
+					output[[paste0("level_", k, "_header")]] <- renderUI(HTML(paste("<h3> Level", k, "Model Selection </h3>")))
+				}
+
+				MakeCovarSelection(level = k, k==input$hlm_k)
+				MakeRandomEffectSelection(level = k)
+			}
+		}
 
 	})
 
 	##----------------- GATHER MODEL SPECIFICATIONS BY LEVEL  ---------------##
-	GatherCovarsHLM <- eventReactive(input$run_button, {
+	# GatherCovarsHLM <- eventReactive(input$run_button, {
+	GatherModelsHLM <- reactive({
 
-		if(! is.null(input$level_1_vars)){
+		if( !is.null(input$level_1_vars) ){
 
+			## GATHER COVARIATES AND CENTERING STATUS FOR FIRST LEVEL MODEL.
 			l <- list(); for(i in 1:input$hlm_k){l[[i]] <- list()}
+
 			l[[1]][["covariates"]] <- input$level_1_vars
-			l[[1]][["centering"]]<- grep(paste0("level_1_centering_"), names(input), value = T)
+			l[[1]][["centering"]] <- vector(mode = "character", length = length(input$level_1_vars))
 
+			for(i in 1:length(input$level_1_vars)){
+				single_covariate <- input$level_1_vars[[i]]
+
+				if(grepl("Intercept", single_covariate)){
+					l[[1]][["centering"]][i] <- NA
+				}
+				if(grepl("__uncentered", single_covariate)){
+					var__centering <- strsplit(single_covariate, "__")[[1]]
+					l[[1]][["covariates"]][i] <- var__centering[1]
+					l[[1]][["centering"]][i] <- var__centering[2]
+				}
+				if(grepl("__grand_centered", single_covariate)){
+					var__centering <- strsplit(single_covariate, "__")[[1]]
+					l[[1]][["covariates"]][i] <- var__centering[1]
+					l[[1]][["centering"]][i] <- var__centering[2]
+				}
+				if(grepl("__group_centered", single_covariate)){
+					var__centering <- strsplit(single_covariate, "__")[[1]]
+					l[[1]][["covariates"]][i] <- var__centering[1]
+					l[[1]][["centering"]][i] <- var__centering[2]
+				}
+			}
+
+			## GATHER NAMES OF MODELING COVARIATES, CENTERING, AND RANDOM EFFECT STATUS FOR ALL
+			## COEFFICIENTS BEING MODELED IN LEVEL K-1.
 			for(i in 2:input$hlm_k){
-				
-				all_level_i_vars <- grep(paste0("level_", i, "_var_"), names(input), value = T)
-				all_level_i_randomEffects <- grep(paste0("level_", i, "_randomEffect_"), names(input), value = T)
-				
-				for(ii in 1:length(all_level_i_vars)){
-					this_coefficient <- all_level_i_vars[ii] ## There are the covariates for modeling a level-1 covariate.
-					this_randomEffect <- all_level_i_randomEffects[ii] ## Need to robustify to make this is ordered same was as all_level_i_vars...!
+				all_level_i_vars <- grep(paste0("^level_", i, "_var_"), names(input), value = T)
 
-					l[[i]][[this_coefficient]] <- list()
+				if( length(all_level_i_vars) > 0 ){
+					
+					all_level_i_randomEffects <- grep(paste0("level_", i, "_randomEffect_"), names(input), value = T)
+					
+					for(ii in 1:length(all_level_i_vars)){
+						this_coefficient <- all_level_i_vars[ii] 		   ## These are the covariates for modeling a level-1 covariate.
+						this_randomEffect <- all_level_i_randomEffects[ii] ## Need to robustify to make this is ordered same was as all_level_i_vars...!
 
-					this_coefficients_covariates <- input[[this_coefficient]]
-					this_coefficients_randomEffect <- input[[this_randomEffect]]
-					l[[i]][[this_coefficient]][["randomEffects"]] <- this_coefficients_randomEffect ## User may specify only a random effect and no coefficients.
+						l[[i]][[this_coefficient]] <- list() ## Make all level_j elements a list to store "covariates" vector for modeling the coefficient, "centering" vector, and "randomEffects" vector.
 
-					if(length(this_coefficients_covariates) > 0){
+						this_coefficients_covariates <- input[[this_coefficient]]
+						this_coefficients_randomEffect <- input[[this_randomEffect]]
 
-						l[[i]][[this_coefficient]][["covariates"]] <- this_coefficients_covariates
-						l[[i]][[this_coefficient]][["centering"]] <- vector(mode = "character", length = length(this_coefficients_covariates))
-						
+						# var__centering <- strsplit(this_coefficient, "__")[[1]] ## (level_j-1) covariates are labeled with centering status, remove it.
+						# this_coefficient <- var__centering[1]
 
-						for(iii in 1:length(this_coefficients_covariates)){
-							single_coefficient_covariate <- this_coefficients_covariates[iii]
+						l[[i]][[this_coefficient]][["randomEffects"]] <- this_coefficients_randomEffect ## User may specify only a random effect and no coefficients.
 
-							if(grepl("Intercept", single_coefficient_covariate)){
-								l[[i]][[this_coefficient]][["centering"]][iii] <- NA
-							}
-							if(grepl("uncentered", single_coefficient_covariate)){
-								l[[i]][[this_coefficient]][["centering"]][iii] <- "uncentered"
-							}
-							if(grepl("grand centered", single_coefficient_covariate)){
-								l[[i]][[this_coefficient]][["centering"]][iii] <- "grand centered"
-							}
-							if(grepl("group centered", single_coefficient_covariate)){
-								l[[i]][[this_coefficient]][["centering"]][iii] <- "group centered"
+						if(length(this_coefficients_covariates) > 0){
+
+							l[[i]][[this_coefficient]][["covariates"]] <- as.character(sapply(this_coefficients_covariates, function(x){strsplit(x, "__")[[1]][1]}))
+							l[[i]][[this_coefficient]][["centering"]] <- vector(mode = "character", length = length(this_coefficients_covariates))
+							
+							for(iii in 1:length(this_coefficients_covariates)){
+								single_coefficient_covariate <- this_coefficients_covariates[iii]
+
+								if(grepl("Intercept", single_coefficient_covariate)){
+									l[[i]][[this_coefficient]][["centering"]][iii] <- NA
+								}
+								if(grepl("__uncentered", single_coefficient_covariate)){
+									l[[i]][[this_coefficient]][["centering"]][iii] <- "uncentered"
+								}
+								if(grepl("__grand_centered", single_coefficient_covariate)){
+									l[[i]][[this_coefficient]][["centering"]][iii] <- "grand_centered"
+								}
+								if(grepl("__group_centered", single_coefficient_covariate)){
+									l[[i]][[this_coefficient]][["centering"]][iii] <- "group_centered"
+								}
 							}
 						}
 					}
@@ -284,22 +335,25 @@ shinyServer(function(input, output, session) {
 	## RENDER MIXED/COMBINED MODEL
 	obs <- observe({
 
-		if(!is.null(input$outcome_var)){
-			outcome <- paste0(input$outcome_var, "_{", paste0(letters[9:(9 + rVals$k - 1)], collapse = ""), "} ")
-		} else{
-			outcome <- NULL
-		}
-		
-		if("Intercept" %in% input$level_1_vars){
-			intercept <- "\\beta_{0j}"
-		} else{
-			intercept <- NULL
-		}
-
-		## TODO: structure GatherCovarsHLM more soundly, write function to print output.
-		l <- GatherCovarsHLM()
+		l <- GatherModelsHLM()
 		print("l:")
 		print(l)
+
+		outcome <- NULL
+		if(!is.null(input$outcome_var)){
+			outcome <- paste0(input$outcome_var, "_{", paste0(letters[9:(9 + rVals$k - 1)], collapse = ""), "} ")
+		}
+
+		## TODO: (1) Display individual-level models using a different greek letter per level.
+		##		 (2) Create Mixed Model string, format into variable named RHS (right hand side of equation)
+		##		 (3) Create LME4 formula
+		# RHS <- CreateRHS(l, level = input$hlm_k)
+		# LME4_FORMULA <- CreateLME4Formula(l, level = input$hlm_k)
+
+		intercept <- NULL
+		if("Intercept" %in% input$level_1_vars){
+			intercept <- "\\beta_{0j}"
+		}
 
 		output$MixedModel <- renderUI({ ## NOTE: MUST USE withMathJax WITH renderUI!!! See http://shiny.rstudio.com/gallery/mathjax.html.
 			withMathJax(

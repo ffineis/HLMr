@@ -81,7 +81,6 @@ shinyUI(navbarPage("HLMr", theme = "bootstrap.css",
     tags$h3("Level 1 Model Selection"),
     fluidRow(
       column(3, offset = 1, uiOutput("select_level_1_vars"))
-      ,column(6, uiOutput("level_1_options"))
     ),
 
     tags$h3("Level 2 Model Selection"), ## Make this uiOutput...
@@ -91,6 +90,7 @@ shinyUI(navbarPage("HLMr", theme = "bootstrap.css",
       ,column(4, uiOutput("level_2_randomEffects"))
     ),
 
+    htmlOutput("level_3_header"),
     fluidRow(
       column(3, offset = 1, uiOutput("level_3_covariates"))
       ,column(4, uiOutput("level_3_randomEffects"))

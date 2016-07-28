@@ -7,12 +7,12 @@ library(DT)
 ## TODO:
 ## - Determine best way to print models of individual coefficients.
 ## - Make UI for level k dependent on that of level k-1
-## - Format mixed model now that coffiecient models can be [somewhat stored] in GatherCovarsHLM.
 
 shinyServer(function(input, output, session) {
 
 	##------------------ INITIALIZE USEFUL STORAGE/FUNS -----------------##
 
+	GREEKLETTERS <- c("\\beta", "\\gamma", "\\delta", "\\xi", "\\pi", "\\phi")
 	rVals <- reactiveValues(DT = NULL)
 
 	shinyInput <- function(FUN, len, id, ...) { 
@@ -46,11 +46,11 @@ shinyServer(function(input, output, session) {
 
 			## If level > 2, we store each coefficient's model separately, so need to aggregate all level-k coefficients separately.
 			if(level > 2){
-				covariate_names <- grep(paste0("level_", level-1, "_var_"), names(input), value = T)
+				covariate_names <- grep(paste0("level_", level-1, "_model_"), names(input), value = T)
 				covariate_names <- as.character(sapply(covariate_names, function(x){input[[x]]}))
 			## If level == 1, all coefficients are stored in one input widget.
 			} else{
-				covariate_names <- input[[paste0("level_",level-1, "_vars")]]
+				covariate_names <- input[[paste0("level_",level-1, "_model")]]
 			}
 
 			if("Intercept" %in% covariate_names){
@@ -60,7 +60,7 @@ shinyServer(function(input, output, session) {
 						interceptLabel[1:(level-1)] <- "0"
 						interceptLabel <- paste0(interceptLabel, collapse = "")
 
-						selectizeInput(paste0("level_", level, "_var_Intercept")
+						selectizeInput(paste0("level_", level, "_model_Intercept")	
 							,label = HTML(paste0("&beta;-", interceptLabel, " covariates:"))
 							,choices = choices
 							,selected = "Intercept"
@@ -77,7 +77,7 @@ shinyServer(function(input, output, session) {
 						coefLabel[1:(level-1)] <- x
 						coefLabel <- paste0(coefLabel, collapse = "")
 						
-						selectizeInput(paste0("level_",level,"_var_", nonIntercept_vars[x]) ## Each level-k (k>1) covariate stored separately
+						selectizeInput(paste0("level_",level,"_model_", nonIntercept_vars[x])
 							,label = HTML(paste0("&beta;-", coefLabel, " covariates:"))		## as "level_k_var_[name]"
 							,choices = choices
 							,selected = "Intercept"
@@ -101,39 +101,25 @@ shinyServer(function(input, output, session) {
 
 			## If level > 2, we store each coefficient's model separately, so need to aggregate all level-k coefficients separately.
 			if(level > 2){
-				covariate_names <- grep(paste0("level_", level-1, "_var_"), names(input), value = T)
+				covariate_names <- grep(paste0("level_", level-1, "_model_"), names(input), value = T)
 				covariate_names <- as.character(sapply(covariate_names, function(x){input[[x]]}))
 			## If level == 1, all coefficients are stored in one input widget.
 			} else{
-				covariate_names <- input[[paste0("level_",level-1, "_vars")]]
+				covariate_names <- input[[paste0("level_",level-1, "_model")]]
 			}
 
-			if("Intercept" %in% covariate_names){
-				l1 <- lapply(c(1), function(x){
+			if(length(covariate_names) > 0){
+				l <- lapply(1:length(covariate_names), function(x){
 						div(style="height: 65px;",
-							checkboxInput(paste0("level_", level, "_randomEffect_Intercept")
-								,label = HTML("Has random effect?")
-								,value = T)
-							)
-						})
-			} else{
-				l1 <- NULL
-			}
-
-			nonIntercept_vars <- setdiff(covariate_names, "Intercept")
-			if(length(nonIntercept_vars) > 0){
-				l2 <- lapply(1:length(nonIntercept_vars), function(x){
-						div(style="height: 65px;",
-							checkboxInput(paste0("level_", level, "_randomEffect_", nonIntercept_vars[x])
+							checkboxInput(paste0("level_", level, "_randomEffect_", covariate_names[x])
 								,label = HTML(paste0("Has random effect?"))
 								,value = T)
 							)
 						})
 			} else{
-				l2 <- NULL
+				l <- NULL
 			}
 
-			l <- append(l1, l2)
 			l
 		})
 	}
@@ -163,6 +149,7 @@ shinyServer(function(input, output, session) {
 
 			dt[, eval(all_names) := lapply(.SD, repl_NA), .SDcols = all_names]
 			rVals$DT <- dt
+			rVals$X <- data.table(V1 = rep(NA, nrow(dt)))
 		}
 		if(any(is.na(dt))){
 			output$na_opt <- radioButtons("handleNA",
@@ -198,7 +185,7 @@ shinyServer(function(input, output, session) {
   
 	## RENDER LEVEL IDENTIFIER VARS.
 	output$levelIDs <- renderUI({
-		lapply(1:input$hlm_k, function(i){
+		lapply(2:input$hlm_k, function(i){
 		  selectizeInput(inputId = paste0("level_id_", i),
 						 label = paste("Level", i, "ID variable"),
 						 choices = names(rVals$DT),
@@ -218,7 +205,7 @@ shinyServer(function(input, output, session) {
 		})
 
 		output$select_level_1_vars <- renderUI({
-			selectizeInput(inputId = "level_1_vars",
+			selectizeInput(inputId = "level_1_model",
 							label = "Covariates",
 							choices = c("Intercept"
 											,paste0(rep(setdiff(names(rVals$DT), input$outcome_var), each = 3)
@@ -229,7 +216,7 @@ shinyServer(function(input, output, session) {
 		})
 	})
 
-	obs <- observeEvent(input$level_1_vars, {
+	obs <- observeEvent(input$level_1_model, {
 
 		## LEVEL k COVARIATE SELECTION, RANDOM EFFECT CHOICE
 		if(input$hlm_k >= 2){
@@ -238,27 +225,27 @@ shinyServer(function(input, output, session) {
 					output[[paste0("level_", k, "_header")]] <- renderUI(HTML(paste("<h3> Level", k, "Model Selection </h3>")))
 				}
 
-				MakeCovarSelection(level = k, k==input$hlm_k)
-				MakeRandomEffectSelection(level = k)
+				MakeCovarSelection(level = k, k==input$hlm_k) 	## Build UI to select level-k model.
+				MakeRandomEffectSelection(level = k)			## Build UI for toggling random effects for level-k model coefficients.
 			}
 		}
 
 	})
 
 	##----------------- GATHER MODEL SPECIFICATIONS BY LEVEL  ---------------##
-	# GatherCovarsHLM <- eventReactive(input$run_button, {
+	
 	GatherModelsHLM <- reactive({
 
-		if( !is.null(input$level_1_vars) ){
+		if(! is.null(input$level_1_model) ){
 
 			## GATHER COVARIATES AND CENTERING STATUS FOR FIRST LEVEL MODEL.
 			l <- list(); for(i in 1:input$hlm_k){l[[i]] <- list()}
 
-			l[[1]][["covariates"]] <- input$level_1_vars
-			l[[1]][["centering"]] <- vector(mode = "character", length = length(input$level_1_vars))
+			l[[1]][["covariates"]] <- input$level_1_model
+			l[[1]][["centering"]] <- vector(mode = "character", length = length(input$level_1_model))
 
-			for(i in 1:length(input$level_1_vars)){
-				single_covariate <- input$level_1_vars[[i]]
+			for(i in 1:length(input$level_1_model)){
+				single_covariate <- input$level_1_model[[i]]
 
 				if(grepl("Intercept", single_covariate)){
 					l[[1]][["centering"]][i] <- NA
@@ -283,7 +270,7 @@ shinyServer(function(input, output, session) {
 			## GATHER NAMES OF MODELING COVARIATES, CENTERING, AND RANDOM EFFECT STATUS FOR ALL
 			## COEFFICIENTS BEING MODELED IN LEVEL K-1.
 			for(i in 2:input$hlm_k){
-				all_level_i_vars <- grep(paste0("^level_", i, "_var_"), names(input), value = T)
+				all_level_i_vars <- grep(paste0("^level_", i, "_model_"), names(input), value = T)
 
 				if( length(all_level_i_vars) > 0 ){
 					
@@ -297,9 +284,6 @@ shinyServer(function(input, output, session) {
 
 						this_coefficients_covariates <- input[[this_coefficient]]
 						this_coefficients_randomEffect <- input[[this_randomEffect]]
-
-						# var__centering <- strsplit(this_coefficient, "__")[[1]] ## (level_j-1) covariates are labeled with centering status, remove it.
-						# this_coefficient <- var__centering[1]
 
 						l[[i]][[this_coefficient]][["randomEffects"]] <- this_coefficients_randomEffect ## User may specify only a random effect and no coefficients.
 
@@ -332,7 +316,54 @@ shinyServer(function(input, output, session) {
 		}
 	})
 
-	## RENDER MIXED/COMBINED MODEL
+	## Print out individual models for levels 1:k.
+	## EVENTUALLY... use this to build the lmer formula object to build HLM.
+	CoefficientModels(lst, hlm_k){
+
+		ijk_etc <- letters[9:(9+hlm_k-1)]
+
+		for(level in 1:hlm_k){
+
+			if(level == 1{
+				covariates <- lst[[1]]$covariates
+				centering <- lst[[1]]$centering
+				level_1_Intercept <- ifelse("Intercept" %in% covariates, TRUE, FALSE)
+				level_1_coefficientCount <- ifelse(level_1_Intercept, (length(covariates)-1), length(covariates)) ## Defines i: 0,1,2,...etc, i.e. first level coefficient identifier.
+
+				for(k in 1:length(covariates)){
+					centeringStatus <- centering[k]
+					if(!is.na(centering[k])){ ## This means that level-1 intercept is present
+						if(centeringStatus == "uncentered"){
+							rVals$X[, eval(paste0(covariates[k])) := rvals$DT[[covariates[k]]] ]
+						}
+						if(centeringStatus == "group_centered"){
+							group_means <- rvals$DT[, mean(eval(covariates[k])), by = input[[paste0("level_id_", level)]] ]$V1	
+							rVals$X[, eval(paste0(covariates[k], "_grpc")) := (rvals$DT[[covariates[k]]] - group_means) ]
+						}
+						if(centeringStatus == "grand_centered"){
+							rVals$X[, eval(paste0(covariates[k], "_grndc")) := (rvals$DT[[covariates[k]]] - mean(rvals$DT[[covariates[k]]])) ]
+						}
+					}
+				}
+			}
+			
+			coefficientModelList <- input[[level]] ## This is a list with names level_*_model_[coefficient/covariate name]
+			num_models <- length(coefficientModelList)
+			modelNames <- names(coefficientModelList) ## Character vector of entries level_*_model_[coefficient/covariate name]
+			outputLetter <- GREEKLETTERS[level] ## Greek letter for coefficient we're modeling.
+			modelLetter <- GREEKLETTERS[(level+1)]	## Greek letter for coefficients used to model upper-level coefficient.
+			
+			for(j in 1:num_models){
+				output <- paste0(outputLetter, "_{", letters[]
+				if("Intercept" %in% modelNames[j]){
+
+				}
+			}
+		}
+	}
+
+	##--------------------- RENDER MIXED/COMBINED MODEL  ------------------##
+
 	obs <- observe({
 
 		l <- GatherModelsHLM()
@@ -347,18 +378,20 @@ shinyServer(function(input, output, session) {
 		## TODO: (1) Display individual-level models using a different greek letter per level.
 		##		 (2) Create Mixed Model string, format into variable named RHS (right hand side of equation)
 		##		 (3) Create LME4 formula
+		# CoefficientModels(l, level = input$hlm_k)
 		# RHS <- CreateRHS(l, level = input$hlm_k)
 		# LME4_FORMULA <- CreateLME4Formula(l, level = input$hlm_k)
 
 		intercept <- NULL
-		if("Intercept" %in% input$level_1_vars){
-			intercept <- "\\beta_{0j}"
+		# if("Intercept" %in% input$level_1_vars){
+		if("Intercept" %in% input$level_1_model){
+			intercept <- paste0("\\beta_{0", letters[10:(9+rVals$k-1)], "} ")
 		}
 
 		output$MixedModel <- renderUI({ ## NOTE: MUST USE withMathJax WITH renderUI!!! See http://shiny.rstudio.com/gallery/mathjax.html.
 			withMathJax(
 			  helpText(paste0(
-					   "$$", outcome, " = ", intercept, "$$"
+					   "$$", outcome, " = ", intercept, " + r_{",letters[9:(9+rVals$k-1)], "} $$"
 						)
 			  )
 			 )

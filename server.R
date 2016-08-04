@@ -293,7 +293,6 @@ shinyServer(function(input, output, session) {
 		## GATHER COVARIATES AND CENTERING STATUS FOR SECOND LEVEL MODELS.
 		for(i in c(1:length(l[[1]]$covariates))){
 			greekLabel <- l[[1]]$label[i]									## e.g. beta_{0jk}, or beta_{1jk}
-			greekLetter <- strsplit(greekLabel, split = "\\{")[[1]][1]		## Coefficient greek letter.
 			subscript <- strsplit(greekLabel, split = "\\{")[[1]][2]		## Coefficient subscript
 
 			modelName <- paste0("level_2_model_", greekLabel) 	## Label this model by regression coefficient.
@@ -336,7 +335,7 @@ shinyServer(function(input, output, session) {
 							l[[2]][[modelName]]$centering[j] <- var__centering[2]
 						}
 					}
-					l[[2]][[modelName]]$label[j] <- paste0(greekLetter, "{", subscript) ## beta_{0jk} -> beta_{00k}
+					l[[2]][[modelName]]$label[j] <- paste0(GREEKLETTERS[i], "_{", subscript) ## beta_{0jk} -> beta_{00k}
 				}
 			}
 		}
@@ -345,49 +344,52 @@ shinyServer(function(input, output, session) {
 		if(hlm_k >= 3){
 			for(i in c(3:hlm_k)){														## i == level we're gathering data on.
 				for(j in c(1:length(l[[(i-1)]]))){										## Iterate over different coefficients to model in level (i-1)
-					for(k in c(1:length(l[[(i-1)]]$covariates))){						## Iterate over different coefficients in 
+					for(k in c(1:length(l[[(i-1)]][[j]]$covariates))){						## Iterate over different coefficients in 
 
 						greekLabel <- l[[(i-1)]][[j]]$label[k]							## Greek label of coefficient in level (i-1) beta_{0jk}, or beta_{1jk}
-						greekLetter <- strsplit(greekLabel, split = "\\{")[[1]][1]		## Coefficient greek letter.
 						subscript <- strsplit(greekLabel, split = "\\{")[[1]][2]		## Coefficient subscript
 
 						modelName <- paste0("level_", i, "_model_", greekLabel)			## Name for model for particular coefficient in level (i-1) model.
 						l[[i]][[modelName]] <- list()
 
+						coefficientCovariates <- grep(paste0("level_", (i-1), "_model_", l[[(i-1)]][[j]]$covariates[k]), names(input), value = T)
 						randomEffects <- grep(paste0("level_", i, "_randomEffect_", l[[(i-1)]][[j]]$covariates[k]), names(input), value = T) ## level_2_randomEffect_[covariate + centering label]
-						l[[i]][[modelName]]$randomEffects <- input[[randomEffects]]
+						
+						if(length(randomEffects) > 0 & length(coefficientCovariates) > 0){
+							l[[i]][[modelName]]$randomEffects <- input[[randomEffects]]
 
-						## Model, label, and describe the centering of the covariates of each of the level-1 coefficients:
-						coefficientCovariates <- input[[grep(paste0("level_" (i-1), "_model_", l[[(i-1)]][[j]]$covariates[k]), names(input), value = T)]]
-						l[[i]][[modelName]]$covariates <- vector(mode = "character", length = length(coefficientCovariates))
-						l[[i]][[modelName]]$label <- l[[2]][[modelName]]$covariates
-						l[[i]][[modelName]]$centering <- l[[2]][[modelName]]$covariates
-						shift <- ifelse("Intercept" %in% coefficientCovariates, TRUE, FALSE)
+							## Model, label, and describe the centering of the covariates of each of the level-1 coefficients:
+							coefficientCovariates <- input[[coefficientCovariates]]
+							l[[i]][[modelName]]$covariates <- vector(mode = "character", length = length(coefficientCovariates))
+							l[[i]][[modelName]]$label <- l[[2]][[modelName]]$covariates
+							l[[i]][[modelName]]$centering <- l[[2]][[modelName]]$covariates
+							shift <- ifelse("Intercept" %in% coefficientCovariates, TRUE, FALSE)
 
-						## Go through this coefficient's model's coefficients.
-						for(m in c(1:length(coefficientCovariates))){
-							coefficientCovariate <- coefficientCovariates[m]
+							## Go through this coefficient's model's coefficients.
+							for(m in c(1:length(coefficientCovariates))){
+								coefficientCovariate <- coefficientCovariates[m]
 
-							var__centering <- strsplit(coefficientCovariate, "__")[[1]]
-							l[[i]][[modelName]]$covariates[m] <- var__centering[1]
+								var__centering <- strsplit(coefficientCovariate, "__")[[1]]
+								l[[i]][[modelName]]$covariates[m] <- var__centering[1]
 
-							## Label coefficient covariates with greek letters with appropriate subscripts.
-							if(coefficientCovariate == "Intercept"){
-								l[[i]][[modelName]]$centering[m] <- NA
-								substr(subscript, 2, 2) <- "0"
-							} else{
-								substr(subscript, 2, 2) <- as.character(ifelse(shift, (m-1), j))
-								if(grepl("__uncentered", coefficientCovariate)){
-									l[[i]][[modelName]]$centering[m] <- var__centering[2]
+								## Label coefficient covariates with greek letters with appropriate subscripts.
+								if(coefficientCovariate == "Intercept"){
+									l[[i]][[modelName]]$centering[m] <- NA
+									substr(subscript, 2, 2) <- "0"
+								} else{
+									substr(subscript, 2, 2) <- as.character(ifelse(shift, (m-1), j))
+									if(grepl("__uncentered", coefficientCovariate)){
+										l[[i]][[modelName]]$centering[m] <- var__centering[2]
+									}
+									if(grepl("__grand_centered", coefficientCovariate)){
+										l[[i]][[modelName]]$centering[m] <- var__centering[2]
+									}
+									if(grepl("__group_centered", coefficientCovariate)){
+										l[[i]][[modelName]]$centering[m] <- var__centering[2]
+									}
 								}
-								if(grepl("__grand_centered", coefficientCovariate)){
-									l[[i]][[modelName]]$centering[m] <- var__centering[2]
-								}
-								if(grepl("__group_centered", coefficientCovariate)){
-									l[[i]][[modelName]]$centering[m] <- var__centering[2]
-								}
+								l[[2]][[modelName]]$label[j] <- paste0(GREEKLETTERS[i], "_{", subscript) ## beta_{0jk} -> beta_{00k}
 							}
-							l[[2]][[modelName]]$label[j] <- paste0(greekLetter, "{", subscript) ## beta_{0jk} -> beta_{00k}
 						}
 					}
 				}

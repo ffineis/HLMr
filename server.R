@@ -358,7 +358,7 @@ shinyServer(function(input, output, session) {
 						coefficientCovariates <- grep(paste0("level_", (i-1), "_model_", l[[(i-1)]][[j]]$covariates[k]), names(input), value = T)
 						randomEffects <- grep(paste0("level_", i, "_randomEffect_", l[[(i-1)]][[j]]$covariates[k]), names(input), value = T) ## level_2_randomEffect_[covariate + centering label]
 						
-						if(length(randomEffects) > 0 & length(coefficientCovariates) > 0){
+						if(length(randomEffects) > 0 & length(coefficientCovariates) > 0){ ## Causes bugs when actual length is already 1, but user changes number models to > 1.
 							l[[i]][[modelName]]$randomEffects <- input[[randomEffects]]
 
 							## Model, label, and describe the centering of the covariates of each of the level-1 coefficients:

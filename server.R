@@ -1,3 +1,4 @@
+setwd("~/NU_scripts/HLM_shiny/")
 library(shiny)
 library(shinyBS)
 library(foreign)
@@ -28,7 +29,6 @@ shinyServer(function(input, output, session) {
 	GREEKLETTERS <- c("beta", "gamma", "delta", "xi", "pi", "phi")
 	RESIDUALLETTERS <- c("e", "r", "u", "f") ## TODO: find out letters typically used to denote random effects coefficient models for level > 3.
 	rVals <- reactiveValues(DT = NULL)
-	# updateHLMList <- reactiveValues(on = TRUE)
 
 	shinyInput <- function(FUN, len, id, ...) { 
 	  inputs = character(len) 
@@ -46,9 +46,12 @@ shinyServer(function(input, output, session) {
 	} 
 
 	## Make list of selectInputs for covariate selection at each level.
+	## NEW STRATEGY: WAIT FOR USER TO SPECIFY ONE LEVEL AT A TIME:
+	## Select level-1 model. Render model list, level-1 model.
+	## Have user click conditional panel to move on to level-2 model, repeat. Etc.
 	MakeCovarSelection <- function(level, isTerminal = F){
 		if(level < 2){stop("Do not apply this function to level 1!")}
-		# print(paste("Making covariate selection UI for level = ", level))
+		print(paste0("Making covariate selection UI for level = ", level))
 		
 		## Outline covariate choices for higher-level models.
 		if(isTerminal){
@@ -63,9 +66,8 @@ shinyServer(function(input, output, session) {
 			if(level > 2){
 				covariate_names <- grep(paste0("level_", level-1, "_model_"), names(input), value = T)
 				covariate_names <- as.character(sapply(covariate_names, function(x){isolate(input[[x]])}))
-			## If level == 1, all coefficients are stored in one input widget.
-			} else{
-				covariate_names <- isolate(input[[paste0("level_",level-1, "_model")]])
+			} else if (level == 2){
+				covariate_names <- isolate(input[[paste0("level_",level-1, "_model")]]) ## level_1_model contains names of level-1 regressors.
 			}
 
 			if("Intercept" %in% covariate_names){
@@ -76,7 +78,7 @@ shinyServer(function(input, output, session) {
 						interceptLabel <- paste0(interceptLabel, collapse = "")
 
 						selectizeInput(paste0("level_", level, "_model_Intercept")	
-							,label = HTML(paste0("&beta;-", interceptLabel, " covariates:"))
+							,label = HTML(paste0("&", GREEKLETTERS[(level-1)], ";-", interceptLabel, " covariates:"))
 							,choices = choices
 							,selected = "Intercept"
 							,multiple = T)
@@ -93,7 +95,7 @@ shinyServer(function(input, output, session) {
 						coefLabel <- paste0(coefLabel, collapse = "")
 						
 						selectizeInput(paste0("level_",level,"_model_", nonIntercept_vars[x])
-							,label = HTML(paste0("&beta;-", coefLabel, " covariates:"))		## as "level_k_var_[name]"
+							,label = HTML(paste0("&", GREEKLETTERS[(level-1)], ";-", coefLabel, " covariates:"))
 							,choices = choices
 							,selected = "Intercept"
 							,multiple = T)
@@ -107,10 +109,10 @@ shinyServer(function(input, output, session) {
 		})
 	}
 
-	## Make list of checkboxInputs for random effect selection
+	## Make list of checkboxInputs for random effect selection.
 	MakeRandomEffectSelection <- function(level){
 		if(level < 2){stop("Do not apply this function to level 1!")}
-		print(paste("Making random effect selection UI for level = ", level))
+		# print(paste("Making random effect selection UI for level = ", level))
 
 		output[[paste0("level_", level, "_randomEffects")]] <- renderUI({
 
@@ -137,6 +139,72 @@ shinyServer(function(input, output, session) {
 
 			l
 		})
+	}
+
+	## Render the Latex strings representing each level's coefficient models.
+	WriteLevelLatex <- function(l, level, k){
+		texModelsList <- list()
+		if(level == 1){
+			outcomeSubscript <- paste0("_{", paste0(letters[9:(9 + k - 1)], collapse = ""), "}")
+			outcome <- paste0(input$outcome_var, outcomeSubscript)
+			tex <- paste0(outcome, " = ")
+			nModels <- 1
+		} else{
+			nModels <- length(l[[level]])
+		}
+		for(i in 1:nModels){
+			if(level == 1){
+				model <- l[[level]]
+				ranef <- TRUE
+			} else{
+				model <- l[[level]][[i]]
+			}
+			if(level > 1){
+				greekOutcome <- GREEKLETTERS[(level-1)]		## greek letter of coefficient we're modeling (level-1)
+				outcomeSubscript <- strsplit(names(l[[level]])[i], greekOutcome)[[1]][2] ## models are labed by coefficients being modeled, grab coefficient
+				outcome <- paste0("\\", greekOutcome, outcomeSubscript)
+				tex <- paste0(outcome, " = ")
+				ranef <- model$randomEffects
+			}
+
+			numCovar <- length(model$covariates)
+			for(j in 1:numCovar){
+
+				greekCoef <- paste0("\\", model$label[j])
+				covariate <- model$covariates[j]
+				centering <- model$centering[j]
+				
+				sep <- ifelse(j == numCovar, "", " + ")
+
+				if(!is.na(centering)){
+					if(centering == "grand_centered"){
+						covariate <- paste0("(", covariate, " - \\bar{", covariate, "}", "_{", paste0(rep("\\cdot", (k-(level-1))), collapse = ""), "})")
+					} else if(centering == "group_centered"){
+						covariate <- paste0("(", covariate, " - \\bar{", covariate, "}", "_{\\cdot", paste0(letters[(9 + level):(9 + k - 1)], collapse = ""), "})")	
+					} else {
+						covariate <- paste0("(", covariate, ")")
+					}
+					
+					tex <- paste0(tex, paste0(greekCoef, covariate, collapse = ""), sep = sep) ## non-intercept covariate case.
+				} else{
+					tex <- paste0(tex, greekCoef, sep = sep) ## Intercept case, just append greek coefficient.
+				}
+			}
+			## If model has random effect specified, append it.
+			if(ranef){
+				tex <- paste0(tex, " + ", paste0(RESIDUALLETTERS[level], outcomeSubscript, collapse = ""))
+			}
+
+			texModelsList[[i]] <- paste0("$$", tex, "$$")
+		}
+		output[[paste0("level_", level, "_tex")]] <- renderUI({
+			lapply(texModelsList, function(x){
+				div(style="height: 65px;",
+					withMathJax(x)
+					)
+				})
+		})
+		return(texModelsList)
 	}
 
 	##----------------------------- FILE/DATA ----------------------------##
@@ -232,7 +300,6 @@ shinyServer(function(input, output, session) {
 	})
 
 	obs <- observeEvent(input$level_1_model, {
-		# updateHLMList$on <- FALSE
 
 		## LEVEL k COVARIATE SELECTION, RANDOM EFFECT CHOICE
 		if(input$hlm_k >= 2){
@@ -245,16 +312,15 @@ shinyServer(function(input, output, session) {
 				MakeRandomEffectSelection(level = k)			## Build UI for toggling random effects for level-k model coefficients.
 			}
 		}
-
-		# updateHLMList$on <- TRUE
 	})
 
 	##----------------- GATHER MODEL SPECIFICATIONS BY LEVEL  ---------------##
 	
 	GatherModelsHLM <- function(){
 		hlm_k <- input$hlm_k
+		modelMatrixCovariates <- NULL ## This vector to hold names of features to pull from grand set of all available features.
 
-		## GATHER COVARIATES AND CENTERING STATUS FOR FIRST LEVEL MODEL.
+		## GATHER COVARIATES AND CENTERING STATUS FOR FIRST (1st) LEVEL MODEL.
 		l <- list(); for(i in c(1:hlm_k)){l[[i]] <- list()}
 
 		l[[1]][["covariates"]] <- input$level_1_model
@@ -263,15 +329,18 @@ shinyServer(function(input, output, session) {
 
 		modelLetter <- GREEKLETTERS[1]
 		coefLetters <- paste0(letters[(9+1):(9+hlm_k-1)], collapse = "")
-		shift <- ifelse("Intercept" %in% l[[1]][["covariates"]], TRUE, FALSE)
+		shift <- ifelse("Intercept" %in% l[[1]][["covariates"]], TRUE, FALSE)	## shift will index coefficient subscripts depending on whether
+																				## we're modeling an intercept or not.
 
 		for(i in 1:length(l[[1]][["covariates"]])){
 			coefficientCovariate <- input$level_1_model[[i]]
 			l[[1]][["label"]][i] <- NA
 
+
 			if(grepl("Intercept", coefficientCovariate)){
 				l[[1]][["centering"]][i] <- NA
 				l[[1]][["label"]][i] <- paste0(modelLetter, "_{0", coefLetters, "}")
+				modelMatrixCovariates <- c(modelMatrixCovariates, "Intercept")
 			} else{
 				var__centering <- strsplit(coefficientCovariate, "__")[[1]]
 			}
@@ -289,10 +358,11 @@ shinyServer(function(input, output, session) {
 			}
 			if(is.na(l[[1]][["label"]][i])){
 				l[[1]][["label"]][i] <- paste0(modelLetter, "_{", ifelse(shift, (i-1), i), coefLetters, "}")
+				modelMatrixCovariates <- c(modelMatrixCovariates, coefficientCovariate)
 			}
 		}
 
-		## GATHER COVARIATES AND CENTERING STATUS FOR SECOND LEVEL MODELS.
+		## GATHER COVARIATES AND CENTERING STATUS FOR SECOND (2nd) LEVEL MODELS.
 		for(i in c(1:length(l[[1]]$covariates))){
 			greekLabel <- l[[1]]$label[i]									## e.g. beta_{0jk}, or beta_{1jk}
 			subscript <- strsplit(greekLabel, split = "\\{")[[1]][2]		## Coefficient subscript
@@ -336,8 +406,9 @@ shinyServer(function(input, output, session) {
 						if(grepl("__group_centered", coefficientCovariate)){
 							l[[2]][[modelName]]$centering[j] <- var__centering[2]
 						}
+						modelMatrixCovariates <- c(modelMatrixCovariates, coefficientCovariate)
 					}
-					l[[2]][[modelName]]$label[j] <- paste0(GREEKLETTERS[i], "_{", subscript) ## beta_{0jk} -> beta_{00k}
+					l[[2]][[modelName]]$label[j] <- paste0(GREEKLETTERS[2], "_{", subscript) ## beta_{0jk} -> beta_{00k}
 				}
 			}
 		}
@@ -390,6 +461,7 @@ shinyServer(function(input, output, session) {
 									if(grepl("__group_centered", coefficientCovariate)){
 										l[[i]][[modelName]]$centering[m] <- var__centering[2]
 									}
+									modelMatrixCovariates <- c(modelMatrixCovariates, coefficientCovariate)
 								}
 								l[[i]][[modelName]]$label[m] <- paste0(GREEKLETTERS[i], "_{", subscript) ## beta_{0jk} -> beta_{00k}
 							}
@@ -398,123 +470,42 @@ shinyServer(function(input, output, session) {
 				}
 			}
 		}
-		print("Finished assembling GatherModelsHLM list.")
-		return(l)
+		# print("Finished assembling GatherModelsHLM list.")
+		return(list(l = l, modelMatrixCovariates = unique(modelMatrixCovariates)))
 	}
-
-	##----------------- PRINT COEFFICIENT MODELS BY LEVEL, BUILD MODEL MATRIX (DEPRECATED, MOVE TO WITHIN GatherModelsHLM)  ---------------##
-
-	## Print out individual models for levels 1:k.
-	## EVENTUALLY... use this to build the lmer formula object to build HLM.
-	# CoefficientModels(lst, hlm_k){
-
-	# 	tmpDT <- copy(isolate(rvals$DT))
-
-	# 	for(level in 1:hlm_k){
-
-	# 		allSubscript <- paste0(letters[(9+level-1):(9 + hlm_k - 1)], collapse = "")
-	# 		groupLettersSubscript <- paste0(letters[(9+level):(9+hlm_k-1)], collapse = "")
-	# 		model_tex <- NULL
-
-	# 		if(level == 1{
-
-	# 			## Render tex for overall outcome variable, e.g. total.fruits from Arabidopsis dataset.
-	# 			if(!is.null(input$outcome_var)){
-	# 				outcome <- paste0(input$outcome_var, "_{", allSubscript, "} ")
-	# 			}
-	# 			## If first level, then there's just one model, the one for y_{allSubscript}
-	# 			num_models <- 1
-	# 		} else{
-	# 			coefficientModelList <- lst[[level]]
-	# 			num_models <- length(coefficientModelList)
-	# 			modelNames <- names(coefficientModelList) ## Character vector of entries level_*_model_[coefficient/covariate name]
-	# 			outcomeLetter <- GREEKLETTERS[(level-1)] ## Greek letter for coefficient we're modeling.
-	# 		}
-
-	# 		modelLetter <- GREEKLETTERS[level]	## Greek letter for coefficients used to model upper-level coefficient.
-
-	# 		for(j in 1:num_models){
-
-	# 			if(level > 1){
-	# 				thisModel <- coefficientModelList[[j]]
-	# 				outcome <- paste0(outcomeLetter, " = ")		## TODO: PROPER SUBSCRIPTING!
-	# 			} else {
-	# 				thisModel <- lst[[1]]
-	# 				outcome <- paste0(input$outcome, "_{", allSubscript, "} = ") ## Sufficient for overall outcome labeling.
-	# 			}
-	# 			model_tex <- outcome
-
-	# 			covariates <- thisModel$covariates
-	# 			centering <- thisModel$centering
-	# 			nonIntercept_vars <- setdiff(covariates, "Intercept")
-				
-	# 			## If applicable, render Level-1 intercept tex coefficient.
-	# 			if("Intercept" %in% covariates){
-	# 				intercept <- paste0(modelLetter, "_{0", groupLettersSubscript, "} ")
-	# 				model_tex <- paste0(outcome, intercept)
-	# 				shift <- TRUE
-	# 			} else{
-	# 				shift <- FALSE
-	# 			}
-
-	# 			##---- Append centered Level-1 covariates to rvals$X, the eventual model matrix. ----##
-	# 			##---- Create coefficient and covariate combination for each non-intercept term of Level-1 model. ----##
-
-	# 			## How to progress along vector of coefficients in model: need to increase index by 1 if intercept is included.
-	# 			rng <- ifelse(shift, c(2:(length(nonIntercept_vars)+1)), seq_len(length(nonIntercept_vars)))
-
-	# 			for(k in rng){
-	# 				centeringStatus <- centering[k]
-	# 				coef <- paste0(GREEKLETTERS[level], "_{", ifelse(shift, (k-1), k), groupLettersSubscript, "}")
-	# 				covar <- paste0("(", covariates[k], "_{", allSubscript, "}")
-
-	# 				if(!is.na(centeringStatus)){ ## Do not apply centering to intercept, which will have centering status of NA.
-	# 					if(centeringStatus == "uncentered"){
-	# 						rVals$X[, eval(paste0(covariates[k])) := tmpDT$DT[[covariates[k]]] ]
-	# 						covar <- paste0(covar, ")")
-	# 					}
-	# 					if(centeringStatus == "group_centered"){
-	# 						tmpDT[, eval(paste0(covariates[k], "_grpc")) := mean(get(covariates[k])), by = c(input[[paste0("level_id_", (level+1))]]) ]  	## Calculate level-(k+1) group means vector.
-	# 						rVals$X[, eval(paste0(covariates[k], "_grpc")) := (tmpDT[[covariates[k]]] - tmpDT[[paste0(covariates[k], "_grpc")]]) ]			## Subtract group means vector.
-	# 						covar <- paste0(covar, " - \\bar{", covariates[k], "_{\\cdot", groupLettersSubscript, "}})")											## e.g. (reg_{ijk} - \bar{reg_{.jk}})
-	# 					}
-	# 					if(centeringStatus == "grand_centered"){
-	# 						rVals$X[, eval(paste0(covariates[k], "_grndc")) := (tmpDT[[covariates[k]]] - mean(tmpDT[[covariates[k]]])) ]					## Calculate grand mean of this covariate, subtract from observed values.
-	# 						covar <- paste0(covar, " - ", covariates[k], "_{", paste0(rep("\\cdot", (hlm_k-(level-1))), collapse = ""), "})")										## e.g. (reg_{ijk} - reg_{...})
-	# 					}
-
-	# 					model_tex <- paste0(level_1_tex, coef, collapse = " + ")
-	# 				}
-	# 			}
-
-	# 			## Render residual error tex.
-	# 			residualError <- "\\epsilon_{",paste0(letters[9:(9+rVals$k-1)], collapse = ""), "} "
-	# 			level_1_tex <- paste0(level_1_tex, residualError, collapse = " + ")
-	# 		}
-			
-	# 	}
-	# }
 
 	##--------------------- RENDER MIXED/COMBINED MODEL  ------------------##
 
 	obs <- observe({
 
-		conditions <- (!is.null(input$level_1_model))
-		for(i in 2:input$hlm_k){
-			conditions <- c(conditions, c((length(grep(paste0("level_", i, "_randomEffect"), names(input))) > 0), (length(grep(paste0("level_", i, "_model_"), names(input))) > 0)))
-		}
-		if(all(conditions)){
-			l <- GatherModelsHLM()
-			print("l:")
-			print(l)
-			cat("\n\n")
-			saveRDS(names(input), "/Users/fineiskid/Desktop/inputList.RDS")
-			saveRDS(l, "/Users/fineiskid/Desktop/modelList.RDS")
-		}
-		## TODO: (1) Display individual-level models using a different greek letter per level.
-		##		 (2) Create Mixed Model string, format into variable named RHS (right hand side of equation)
-		##		 (3) Create LME4 formula
-		# CoefficientModels(l, level = input$hlm_k)
+		# conditions <- (!is.null(input$level_1_model))
+		# for(i in 2:input$hlm_k){
+		# 	conditions <- c(conditions, c((length(grep(paste0("level_", i, "_randomEffect"), names(input))) > 0), (length(grep(paste0("level_", i, "_model_"), names(input))) > 0)))
+		# }
+		# if(all(conditions)){
+		# 	modelList <- GatherModelsHLM()
+		# 	l <- modelList$l
+		# 	features <- modelList$modelMatrixCovariates
+		# 	cat("l:\n")
+		# 	print(l)
+		# 	for(i in 1:input$hlm_k){
+		# 		WriteLevelLatex(l, i, input$hlm_k)
+		# 	}
+		# 	# cat("Feautres:\n\t")
+		# 	# cat(features, collapse = "\n\t")
+		# 	# tryCatch({
+		# 	# 	for(i in 1:input$hlm_k){
+		# 	# 		WriteLevelLatex(l, i, input$hlm_k)
+		# 	# 	}},
+		# 	# 	error = function(e){
+		# 	# 		browser()
+		# 	# })
+		# 	cat("\n\n")
+		# 	saveRDS(names(input), "/Users/fineiskid/Desktop/inputList.RDS")
+		# 	saveRDS(l, "/Users/fineiskid/Desktop/modelList.RDS")
+		# }
+		## TODO: (1) Create Mixed Model string, format into variable named RHS (right hand side of equation)
+		##		 (2) Create LME4 formula
 		# RHS <- CreateRHS(l, level = input$hlm_k)
 		# LME4_FORMULA <- CreateLME4Formula(l, level = input$hlm_k)
 	})

@@ -53,7 +53,7 @@ shinyUI(navbarPage("HLMr", theme = "bootstrap.css",
       tabPanel("Model Selection",
         sidebarLayout(
           sidebarPanel(
-            radioButtons("select_level",
+            radioButtons("select_level", ## Change this in session to hlm_k
               "Outcome/Level Selection",
               c("Outcome", paste0("Level-", 1:4)),
               selected = "Outcome"
@@ -61,7 +61,7 @@ shinyUI(navbarPage("HLMr", theme = "bootstrap.css",
             width = 3 ## Change width of sidebar selection to smaller than default of 4 units.
           ),
           mainPanel(
-            column(12, offset = 1,
+            column(9, offset = 1,
               fluidRow(
                 conditionalPanel('input.select_level === "Outcome"',
                   fluidRow(
@@ -70,67 +70,59 @@ shinyUI(navbarPage("HLMr", theme = "bootstrap.css",
                       choices = c("Normal (Continuous)", "Bernoulli (0 or 1)", "Poisson", "Binomial", "Multinomial", "Ordinal"),
                       multiple = F)
                     ),
-                    column(5, selectInput("outcome_var_preprocess",
+                    column(4, selectInput("outcome_var_preprocess",
                       "Preprocess Outcome Variable",
                       choices = c("None", "Center", "Scale by std-dev", "Center+Scale"),
                       selected = "None",
                       multiple = F)
                     )
+                  ),
+                  fluidRow(
+                    column(5, uiOutput("outcome"))
+                  )
+                ),
+                conditionalPanel('input.select_level === "Level-1"',
+                  tags$h3("Level 1 Model Selection"),
+                  fluidRow(
+                    column(5, uiOutput("select_level_1_vars"))
+                  ),
+                  fluidRow(
+                    column(9, uiOutput("level_1_tex"))
+                  )
+                ),
+                conditionalPanel('input.select_level === "Level-2"',
+                  tags$h3("Level 2 Model Selection"),
+                  fluidRow(
+                    column(5, uiOutput("level_2_covariates"))
+                    ,column(3, uiOutput("level_2_randomEffects"))
+                  ),
+                  fluidRow(
+                    column(9, uiOutput("level_2_tex"))
+                  )
+                ),
+                conditionalPanel('input.select_level === "Level-3"',
+                  tags$h3("Level 3 Model Selection"),
+                  fluidRow(
+                    column(5, uiOutput("level_3_covariates"))
+                    ,column(3, uiOutput("level_3_randomEffects"))
+                  ),
+                  fluidRow(
+                    column(9, uiOutput("level_3_tex"))
+                  )
+                ),
+                conditionalPanel('input.select_level === "Level-4"',
+                  tags$h3("Level 4 Model Selection"),
+                  fluidRow(
+                    column(5, uiOutput("level_4_covariates"))
+                    ,column(3, uiOutput("level_4_randomEffects"))
+                  ),
+                  fluidRow(
+                    column(9, uiOutput("level_4_tex"))
                   )
                 )
               )
             )
           )
-            # tags$h3("Outcome Variable"),
-            # fluidRow(
-            #   column(3, offset = 1,
-            #     uiOutput("outcome")
-            #   )
-            # ),
-            # fluidRow(
-            #   column(3, offset = 1,
-            #     checkboxInput("edit_outcome",
-            #                   "Enter outcome variable editor",
-            #                   value = F)
-            #   )
-            # ),
-            # fluidRow(
-            #   column(12, offset = 1,
-            #     conditionalPanel("input.edit_outcome === true",
-            #       fluidRow(
-            #         column(3, selectInput("outcome_var_distribution",
-            #                     "Select Outcome Variable Distribution",
-            #                     choices = c("Normal (Continuous)", "Bernoulli (0 or 1)", "Poisson", "Binomial", "Multinomial", "Ordinal"),
-            #                     multiple = F)),
-            #         column(3, selectInput("outcome_var_preprocess",
-            #                     "Preprocess Outcome Variable",
-            #                     choices = c("None", "Center", "Scale by std-dev", "Center+Scale"),
-            #                     selected = "None",
-            #                     multiple = F))
-            #         )
-            #     )
-            #   )
-            # ),
-            
-            # tags$h3("Level 1 Model Selection"),
-            # fluidRow(
-            #   column(3, offset = 1, uiOutput("select_level_1_vars"))
-            #   ,column(4, uiOutput("level_1_tex"))
-            # ),
-
-            # tags$h3("Level 2 Model Selection"), ## Make this uiOutput...
-            # fluidRow(
-            #   # column(10, offset = 1, dataTableOutput("level_2_options"))
-            #   column(3, offset = 1, uiOutput("level_2_covariates"))
-            #   ,column(3, uiOutput("level_2_randomEffects"))
-            #   ,column(4, uiOutput("level_2_tex"))
-            # ),
-
-            # htmlOutput("level_3_header"),
-            # fluidRow(
-            #   column(3, offset = 1, uiOutput("level_3_covariates"))
-            #   ,column(3, uiOutput("level_3_randomEffects"))
-            # )
         )
       ),
       tabPanel("View Models in Aggregate",

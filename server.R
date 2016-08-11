@@ -6,20 +6,16 @@ library(data.table)
 library(DT)
 
 ## TODO:
-## - Fix GatherModelsHLM
-## - Write function to call within GatherModelsHLM that will take labels and random effect status and
-##		format Latex equations.
-## - Make UI for level k dependent on that of level k-1
-
-## PROBLEMS:
-## (1) Dynamic creation of UI coupled with the observer calling GatherModelsHLM() leads to timing issues --
-##		e.g. the 1st order covariates change, but before the UI can be rendered for the newly required >1-level model specifications,
-##		GatherModelsHLM is already asking for input$level_2_model_beta_{10} which technically hasn't been rendered yet.
-
-## POSSIBLE SOLUTION:
-## (1) Instead of calling MakeCovarSelection and MakeRandomEffectSelection in a for loop within an event observer,
-##		try moving the for loop within the functions themselves.
-
+##  - change MakeCovarSelection to generate UI widgets with inputId's that include the greek, subscripted coefficient
+##    of the coefficient in the level prior that's being modeled. This way, we can label the coefficients correctly in
+##    an arbitrary level.
+##  - change MakeCovarSelection to run a for loop, generating all coefficient UI for levels j+1 -> k, if a level-j model
+##    was altered. The main idea going forward is that user will click "update level j" and then an event observer will trigger,
+##    making MakeCovarSelection run (this will reset all of levels j+1 -> k UI and create appropriate UI based on user selection),
+##    making GatherModelsHLM run, and making WriteLatexModel run for all levels j -> k.
+##  - Make observeEvent observers for each of update_level_* actionButtons.
+##  - When user selects the "View Models In Aggregate" tabPanel run GatherModelsHLM and WriteLatexModel to gather models up on tab.
+##    (see http://shiny.rstudio.com/articles/action-buttons.html for reference on how to use tabsetPanel change as action button.)
 
 
 shinyServer(function(input, output, session) {
@@ -77,7 +73,7 @@ shinyServer(function(input, output, session) {
 						interceptLabel[1:(level-1)] <- "0"
 						interceptLabel <- paste0(interceptLabel, collapse = "")
 
-						selectizeInput(paste0("level_", level, "_model_Intercept")	
+						selectizeInput(paste0("level_", level, "_model_Intercept")	## Potentially not unique.
 							,label = HTML(paste0("&", GREEKLETTERS[(level-1)], ";-", interceptLabel, " covariates:"))
 							,choices = choices
 							,selected = "Intercept"
@@ -94,7 +90,7 @@ shinyServer(function(input, output, session) {
 						coefLabel[1:(level-1)] <- x
 						coefLabel <- paste0(coefLabel, collapse = "")
 						
-						selectizeInput(paste0("level_",level,"_model_", nonIntercept_vars[x])
+						selectizeInput(paste0("level_",level,"_model_", nonIntercept_vars[x]) 	## Potentially not a unique UI id.
 							,label = HTML(paste0("&", GREEKLETTERS[(level-1)], ";-", coefLabel, " covariates:"))
 							,choices = choices
 							,selected = "Intercept"
@@ -207,7 +203,7 @@ shinyServer(function(input, output, session) {
 		return(texModelsList)
 	}
 
-	##----------------------------- FILE/DATA ----------------------------##
+	##----------------------------- FILE/DATA, UP-FRONT MODS TO MAKE ----------------------------##
 	
 	## LOAD IN DATA FILE.
 	observeEvent(input$upload_data, {
@@ -268,46 +264,50 @@ shinyServer(function(input, output, session) {
   
 	## RENDER LEVEL IDENTIFIER VARS.
 	output$levelIDs <- renderUI({
-		lapply(2:input$hlm_k, function(i){
-		  selectizeInput(inputId = paste0("level_id_", i),
-						 label = paste("Level", i, "ID variable"),
-						 choices = names(rVals$DT),
-						 multiple = F)
-		})
+		if(input$hlm_k >= 2){
+			lapply(2:input$hlm_k, function(i){
+			  selectizeInput(inputId = paste0("level_id_", i),
+							 label = paste("Level", i, "ID variable"),
+							 choices = names(rVals$DT),
+							 multiple = F)
+			})
+		}
 	})
 
+	## Update the sidebarPanel in Model Selection tabset so that we can only see relevant number of levels.
+	obs <- observeEvent(input$hlm_k, {
+		updateRadioButtons(session,
+			,inputId = "select_level"
+			,choices = c("Outcome", paste0("Level-", 1:input$hlm_k))
+		)
+	})
+
+	## MAKE OUTCOME VARIABLE SELECTION UI.
+	output$outcome <- renderUI({
+		selectizeInput(inputId = "outcome_var",
+						label = "",
+						choices = names(rVals$DT),
+						selected = names(rVals$DT)[1],
+						multiple = F)
+	})
+
+	## MAKE LEVEL-1 UI.
+	output$select_level_1_vars <- renderUI({
+		selectizeInput(inputId = "level_1_model",
+						label = "Covariates",
+						choices = c("Intercept"
+									,paste0(rep(setdiff(names(rVals$DT), input$outcome_var), each = 3) ## Disallow user from picking outcome variable as a predictor.
+									,c("__uncentered", "__group_centered", "__grand_centered"))
+									),
+						selected = "Intercept",
+						multiple = T)
+	})
 
 	##------------------------------ SPECIFY MODEL --------------------------##
-	obs <- observe({
-		output$outcome <- renderUI({
-			selectizeInput(inputId = "outcome_var",
-							label = "",					## No widget label to avoid clutter (already using h3 header)
-							choices = names(rVals$DT),
-							selected = names(rVals$DT)[1],
-							multiple = F)
-		})
-
-		output$select_level_1_vars <- renderUI({
-			selectizeInput(inputId = "level_1_model",
-							label = "Covariates",
-							choices = c("Intercept"
-										,paste0(rep(setdiff(names(rVals$DT), input$outcome_var), each = 3) ## Disallow user from picking outcome variable as a predictor.
-										,c("__uncentered", "__group_centered", "__grand_centered"))
-										),
-							selected = "Intercept",
-							multiple = T)
-		})
-	})
-
-	obs <- observeEvent(input$level_1_model, {
-
+	obs <- observeEvent(input$level_1_model, { ## REPLACE THIS WITH update_level_* event observer!!!!
 		## LEVEL k COVARIATE SELECTION, RANDOM EFFECT CHOICE
 		if(input$hlm_k >= 2){
 			for(k in 2:input$hlm_k){
-				if(k > 2){
-					output[[paste0("level_", k, "_header")]] <- renderUI(HTML(paste("<h3> Level", k, "Model Selection </h3>")))
-				}
-
 				MakeCovarSelection(level = k, k==input$hlm_k) 	## Build UI to select level-k model.
 				MakeRandomEffectSelection(level = k)			## Build UI for toggling random effects for level-k model coefficients.
 			}
@@ -478,35 +478,5 @@ shinyServer(function(input, output, session) {
 
 	obs <- observe({
 
-		# conditions <- (!is.null(input$level_1_model))
-		# for(i in 2:input$hlm_k){
-		# 	conditions <- c(conditions, c((length(grep(paste0("level_", i, "_randomEffect"), names(input))) > 0), (length(grep(paste0("level_", i, "_model_"), names(input))) > 0)))
-		# }
-		# if(all(conditions)){
-		# 	modelList <- GatherModelsHLM()
-		# 	l <- modelList$l
-		# 	features <- modelList$modelMatrixCovariates
-		# 	cat("l:\n")
-		# 	print(l)
-		# 	for(i in 1:input$hlm_k){
-		# 		WriteLevelLatex(l, i, input$hlm_k)
-		# 	}
-		# 	# cat("Feautres:\n\t")
-		# 	# cat(features, collapse = "\n\t")
-		# 	# tryCatch({
-		# 	# 	for(i in 1:input$hlm_k){
-		# 	# 		WriteLevelLatex(l, i, input$hlm_k)
-		# 	# 	}},
-		# 	# 	error = function(e){
-		# 	# 		browser()
-		# 	# })
-		# 	cat("\n\n")
-		# 	saveRDS(names(input), "/Users/fineiskid/Desktop/inputList.RDS")
-		# 	saveRDS(l, "/Users/fineiskid/Desktop/modelList.RDS")
-		# }
-		## TODO: (1) Create Mixed Model string, format into variable named RHS (right hand side of equation)
-		##		 (2) Create LME4 formula
-		# RHS <- CreateRHS(l, level = input$hlm_k)
-		# LME4_FORMULA <- CreateLME4Formula(l, level = input$hlm_k)
 	})
 })

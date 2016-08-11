@@ -23,7 +23,7 @@ shinyUI(navbarPage("HLMr", theme = "bootstrap.css",
             )
           ),
           column(3, offset = 2,
-            numericInput('hlm_k', label = "HLM-k (order of model)", value = 2, min = 1, max = 4, step = 1)
+            numericInput('hlm_k', label = "HLM-k (order of model)", value = 2, min = 2, max = 4, step = 1)
           )
         ),
         tags$br(),
@@ -64,60 +64,76 @@ shinyUI(navbarPage("HLMr", theme = "bootstrap.css",
             column(9, offset = 1,
               fluidRow(
                 conditionalPanel('input.select_level === "Outcome"',
-                  fluidRow(
+                  tags$h3("Outcome Variable Selection")
+                  ,fluidRow(
+                    column(5, uiOutput("outcome"))
+                  )
+                  ,tags$br()
+                  ,tags$br()
+                  ,tags$h3("Outcome Variable Preprocessing")
+                  ,fluidRow(
                     column(5, selectInput("outcome_var_distribution",
                       "Select Outcome Variable Distribution",
                       choices = c("Normal (Continuous)", "Bernoulli (0 or 1)", "Poisson", "Binomial", "Multinomial", "Ordinal"),
                       multiple = F)
-                    ),
-                    column(4, selectInput("outcome_var_preprocess",
+                    )
+                    ,column(4, selectInput("outcome_var_preprocess",
                       "Preprocess Outcome Variable",
                       choices = c("None", "Center", "Scale by std-dev", "Center+Scale"),
                       selected = "None",
                       multiple = F)
                     )
-                  ),
-                  fluidRow(
-                    column(5, uiOutput("outcome"))
                   )
                 ),
                 conditionalPanel('input.select_level === "Level-1"',
-                  tags$h3("Level 1 Model Selection"),
-                  fluidRow(
-                    column(5, uiOutput("select_level_1_vars"))
-                  ),
-                  fluidRow(
+                  tags$h3("Level 1 Model Selection")
+                  ,fluidRow(
+                    column(8, uiOutput("select_level_1_vars"))
+                  )
+                  ,bsButton("update_level_1", "Update Level-1 Model", size = "small", style = "primary")    ## add tooltip about changing other levels' models.
+                  ,tags$br(), tags$br(), tags$br()
+                  ,tags$h4("Current Level-1 Model:")
+                  ,fluidRow(
                     column(9, uiOutput("level_1_tex"))
                   )
                 ),
                 conditionalPanel('input.select_level === "Level-2"',
-                  tags$h3("Level 2 Model Selection"),
-                  fluidRow(
-                    column(5, uiOutput("level_2_covariates"))
-                    ,column(3, uiOutput("level_2_randomEffects"))
-                  ),
-                  fluidRow(
-                    column(9, uiOutput("level_2_tex"))
+                  tags$h3("Level 2 Model Selection")
+                  ,fluidRow(
+                    column(8, uiOutput("level_2_covariates"))
+                    ,column(4, uiOutput("level_2_randomEffects"))
+                  )
+                  ,bsButton("update_level_2", "Update Level-2 Models", size = "small", style = "primary")   ## add tooltip about changing other levels' models.
+                  ,tags$br(), tags$br(), tags$br()
+                  ,tags$h4("Current Level-2 Models:")
+                  ,fluidRow(
+                    column(12, uiOutput("level_2_tex"))
                   )
                 ),
                 conditionalPanel('input.select_level === "Level-3"',
-                  tags$h3("Level 3 Model Selection"),
-                  fluidRow(
-                    column(5, uiOutput("level_3_covariates"))
-                    ,column(3, uiOutput("level_3_randomEffects"))
-                  ),
-                  fluidRow(
-                    column(9, uiOutput("level_3_tex"))
+                  tags$h3("Level 3 Model Selection")
+                  ,fluidRow(
+                    column(8, uiOutput("level_3_covariates"))
+                    ,column(4, uiOutput("level_3_randomEffects"))
+                  )
+                  ,bsButton("update_level_3", "Update Level-3 Models", size = "small", style = "primary")   ## add tooltip about changing other levels' models.
+                  ,tags$br(), tags$br(), tags$br()
+                  ,tags$h4("Current Level-3 Models:")
+                  ,fluidRow(
+                    column(12, uiOutput("level_3_tex"))
                   )
                 ),
                 conditionalPanel('input.select_level === "Level-4"',
                   tags$h3("Level 4 Model Selection"),
                   fluidRow(
-                    column(5, uiOutput("level_4_covariates"))
-                    ,column(3, uiOutput("level_4_randomEffects"))
-                  ),
-                  fluidRow(
-                    column(9, uiOutput("level_4_tex"))
+                    column(8, uiOutput("level_4_covariates"))
+                    ,column(4, uiOutput("level_4_randomEffects"))
+                  )
+                  ,bsButton("update_level_4", "Update Level-4 Models", size = "small", style = "primary")   ## add tooltip about changing other levels' models.
+                  ,tags$br(), tags$br(), tags$br()
+                  ,tags$h4("Current Level-4 Models:")
+                  ,fluidRow(
+                    column(12, uiOutput("level_4_tex"))
                   )
                 )
               )

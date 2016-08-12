@@ -46,7 +46,7 @@ shinyServer(function(input, output, session) {
 	## Select level-1 model. Render model list, level-1 model.
 	## Have user click conditional panel to move on to level-2 model, repeat. Etc.
 	MakeCovarSelection <- function(level, isTerminal = F){
-		if(level < 2){stop("Do not apply this function to level 1!")}
+		if(level < 2){stop("Do not apply this function to a level 1 model!")}
 		print(paste0("Making covariate selection UI for level = ", level))
 		
 		## Outline covariate choices for higher-level models.
@@ -57,53 +57,105 @@ shinyServer(function(input, output, session) {
 		}
 
 		output[[paste0("level_",level,"_covariates")]] <- renderUI({
+			hlm_k <- input$hlm_k
 
-			## If level > 2, we store each coefficient's model separately, so need to aggregate all level-k coefficients separately.
-			if(level > 2){
-				covariate_names <- grep(paste0("level_", level-1, "_model_"), names(input), value = T)
-				covariate_names <- as.character(sapply(covariate_names, function(x){isolate(input[[x]])}))
-			} else if (level == 2){
-				covariate_names <- isolate(input[[paste0("level_",level-1, "_model")]]) ## level_1_model contains names of level-1 regressors.
-			}
+			if (level == 2){
+				covariateNames <- isolate(input[[paste0("level_",level-1, "_model")]]) 		## level_1_model contains names of level-1 regressors.
+				nonIntercept_vars <- setdiff(covariateNames, "Intercept")
+				
+				modelLetter <- GREEKLETTERS[(level-1)]										## Label coefficient model with level-1 greek letter.
+				coefSubcript <- paste0(letters[(9+(level-1)):(9+hlm_k-1)], collapse = "")	## Subscript will contain at least k-level letters.
+				shift <- ifelse("Intercept" %in% covariateNames, TRUE, FALSE)	
 
-			if("Intercept" %in% covariate_names){
-				l1 <- lapply(c(1), function(x){
+				if(shift){
+					l1 <- lapply(c(1), function(x){
 
-						interceptLabel <- letters[9:(9 + isolate(input$hlm_k) - 1)]
-						interceptLabel[1:(level-1)] <- "0"
-						interceptLabel <- paste0(interceptLabel, collapse = "")
+						coefSubscript <- paste0(0, coefSubcript, collapse = "")
+						coef <- paste0(modelLetter, "_{", coefSubscript, "}")
+						coefHTML <- HTML(paste0("&", modelLetter, ";<sub>", coefSubscript, "</sub> covariates:", collapse = ""))
 
-						selectizeInput(paste0("level_", level, "_model_Intercept")	## Potentially not unique.
-							,label = HTML(paste0("&", GREEKLETTERS[(level-1)], ";-", interceptLabel, " covariates:"))
+						selectizeInput(paste0("level_", level, "_model_", coef)
+							,label = coefHTML
 							,choices = choices
 							,selected = "Intercept"
 							,multiple = T)
 						})
-			} else{
-				l1 <- NULL
-			}
-			nonIntercept_vars <- setdiff(covariate_names, "Intercept")
-			if(length(nonIntercept_vars) > 0){
-				l2 <- lapply(1:length(nonIntercept_vars), function(x){
 
-						coefLabel <- letters[9:(9 + isolate(input$hlm_k) - 1)]
-						coefLabel[1:(level-1)] <- x
-						coefLabel <- paste0(coefLabel, collapse = "")
+				} else{
+					l1 <- NULL
+				}
+
+				if(length(nonIntercept_vars) > 0){
+					l2 <- lapply(1:length(nonIntercept_vars), function(x){
+
+						coefSubscript <- paste0(x, coefSubcript, collapse = "")
+						coef <- paste0(modelLetter, "_{", coefSubscript, "}")
+						coefHTML <- HTML(paste0("&", modelLetter, ";<sub>", coefSubscript, "</sub> covariates:", collapse = ""))
 						
-						selectizeInput(paste0("level_",level,"_model_", nonIntercept_vars[x]) 	## Potentially not a unique UI id.
-							,label = HTML(paste0("&", GREEKLETTERS[(level-1)], ";-", coefLabel, " covariates:"))
+						selectizeInput(paste0("level_",level,"_model_", coef) 	## Potentially not a unique inputId when level >= 3.
+							,label = coefHTML
 							,choices = choices
 							,selected = "Intercept"
 							,multiple = T)
-						})
-			} else{
-				l2 <- NULL
-			}
+					})
 
-			l <- append(l1, l2)
-			l
+				} else{
+					l2 <- NULL
+				}
+
+				l <- append(l1, l2)
+			}
+			return(l)	## renderUI to return list (l) of HTML widgets.
 		})
 	}
+
+
+
+		# 	## If level > 2, we store each coefficient's model separately, so need to aggregate all level-k coefficients separately.
+		# 	if(level > 2){
+		# 		coefficient_names <- grep(paste0("level_", level-1, "_model_"), names(input), value = T)		## inputId's of coefficients in previous level we'll model.
+		# 		covariate_names <- as.character(sapply(coefficient_names, function(x){isolate(input[[x]])}))
+		# 	} else if (level == 2){
+		# 		covariate_names <- isolate(input[[paste0("level_",level-1, "_model")]]) ## level_1_model contains names of level-1 regressors.
+		# 	}
+
+		# 	if("Intercept" %in% covariate_names){
+		# 		l1 <- lapply(c(1), function(x){
+
+		# 				interceptLabel <- letters[9:(9 + isolate(input$hlm_k) - 1)]
+		# 				interceptLabel[1:(level-1)] <- "0"
+		# 				interceptLabel <- paste0(interceptLabel, collapse = "")
+
+		# 				selectizeInput(paste0("level_", level, "_model_Intercept")	## Potentially not unique when level >= 3.
+		# 					,label = HTML(paste0("&", GREEKLETTERS[(level-1)], ";-", interceptLabel, " covariates:"))
+		# 					,choices = choices
+		# 					,selected = "Intercept"
+		# 					,multiple = T)
+		# 				})
+		# 	} else{
+		# 		l1 <- NULL
+		# 	}
+		# 	nonIntercept_vars <- setdiff(covariate_names, "Intercept")
+		# 	if(length(nonIntercept_vars) > 0){
+		# 		l2 <- lapply(1:length(nonIntercept_vars), function(x){
+
+		# 				coefLabel <- letters[9:(9 + isolate(input$hlm_k) - 1)]
+		# 				coefLabel[1:(level-1)] <- x
+		# 				coefLabel <- paste0(coefLabel, collapse = "")
+						
+		# 				selectizeInput(paste0("level_",level,"_model_", nonIntercept_vars[x]) 	## Potentially not a unique inputId when level >= 3.
+		# 					,label = HTML(paste0("&", GREEKLETTERS[(level-1)], ";-", coefLabel, " covariates:"))
+		# 					,choices = choices
+		# 					,selected = "Intercept"
+		# 					,multiple = T)
+		# 				})
+		# 	} else{
+		# 		l2 <- NULL
+		# 	}
+
+		# 	l <- append(l1, l2)
+		# 	l
+		# })
 
 	## Make list of checkboxInputs for random effect selection.
 	MakeRandomEffectSelection <- function(level){
@@ -291,7 +343,7 @@ shinyServer(function(input, output, session) {
 						multiple = F)
 	})
 
-	## MAKE LEVEL-1 UI.
+	## MAKE LEVEL-1 MODEL SELECTION UI.
 	output$select_level_1_vars <- renderUI({
 		selectizeInput(inputId = "level_1_model",
 						label = "Covariates",
@@ -476,7 +528,4 @@ shinyServer(function(input, output, session) {
 
 	##--------------------- RENDER MIXED/COMBINED MODEL  ------------------##
 
-	obs <- observe({
-
-	})
 })

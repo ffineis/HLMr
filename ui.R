@@ -77,7 +77,7 @@ shinyUI(navbarPage("HLMr", theme = "bootstrap.css",
                       choices = c("Normal (Continuous)", "Bernoulli (0 or 1)", "Poisson", "Binomial", "Multinomial", "Ordinal"),
                       multiple = F)
                     )
-                    ,column(4, selectInput("outcome_var_preprocess",
+                    ,column(5, selectInput("outcome_var_preprocess",
                       "Preprocess Outcome Variable",
                       choices = c("None", "Center", "Scale by std-dev", "Center+Scale"),
                       selected = "None",

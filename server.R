@@ -34,9 +34,7 @@ shinyServer(function(input, output, session) {
 	  })) 
 	} 
 
-	## Make list of selectInputs for covariate selection at each level.
-	## NEW STRATEGY: WAIT FOR USER TO SPECIFY ONE LEVEL AT A TIME:
-	## Select level-1 model. Render model list, level-1 model.
+	## Make list of selectInputs and checkboxInputs for covariate & random effect selection at each level.
 	## Have user click conditional panel to move on to level-2 model, repeat. Etc.
 	MakeLevelUI <- function(level, isTerminal = F){
 		
@@ -122,7 +120,7 @@ shinyServer(function(input, output, session) {
 							coef <- paste0(modelLetter, "_{", subscript)
 							coefHTML <- HTML(paste0("&", modelLetter, ";<sub>", gsub("}", "", subscript), "</sub> has random effect?", collapse = ""))
 
-							div(style="height: 65px;",
+							div(style="height: 67px;",
 								checkboxInput(paste0("level_", level, "_randomEffect_", coef)
 									,label = coefHTML
 									,value = T)
@@ -140,7 +138,7 @@ shinyServer(function(input, output, session) {
 							coef <- paste0(modelLetter, "_{", subscript)
 							coefHTML <- HTML(paste0("&", modelLetter, ";<sub>", gsub("}", "", subscript), "</sub> has random effect?", collapse = ""))
 							
-							div(style="height: 65px;",
+							div(style="height: 67px;",
 								checkboxInput(paste0("level_", level, "_randomEffect_", coef)
 									,label = coefHTML
 									,value = T)
@@ -265,72 +263,6 @@ shinyServer(function(input, output, session) {
 		})
 	}
 
-	## Render the Latex strings representing each level's coefficient models.
-	WriteLevelLatex <- function(l, level, k){
-		texModelsList <- list()
-		if(level == 1){
-			outcomeSubscript <- paste0("_{", paste0(letters[9:(9 + k - 1)], collapse = ""), "}")
-			outcome <- paste0(input$outcome_var, outcomeSubscript)
-			tex <- paste0(outcome, " = ")
-			nModels <- 1
-		} else{
-			nModels <- length(l[[level]])
-		}
-		for(i in 1:nModels){
-			if(level == 1){
-				model <- l[[level]]
-				ranef <- TRUE
-			} else{
-				model <- l[[level]][[i]]
-			}
-			if(level > 1){
-				greekOutcome <- GREEKLETTERS[(level-1)]		## greek letter of coefficient we're modeling (level-1)
-				outcomeSubscript <- strsplit(names(l[[level]])[i], greekOutcome)[[1]][2] ## models are labed by coefficients being modeled, grab coefficient
-				outcome <- paste0("\\", greekOutcome, outcomeSubscript)
-				tex <- paste0(outcome, " = ")
-				ranef <- model$randomEffects
-			}
-
-			numCovar <- length(model$covariates)
-			for(j in 1:numCovar){
-
-				greekCoef <- paste0("\\", model$label[j])
-				covariate <- model$covariates[j]
-				centering <- model$centering[j]
-				
-				sep <- ifelse(j == numCovar, "", " + ")
-
-				if(!is.na(centering)){
-					if(centering == "grand_centered"){
-						covariate <- paste0("(", covariate, " - \\bar{", covariate, "}", "_{", paste0(rep("\\cdot", (k-(level-1))), collapse = ""), "})")
-					} else if(centering == "group_centered"){
-						covariate <- paste0("(", covariate, " - \\bar{", covariate, "}", "_{\\cdot", paste0(letters[(9 + level):(9 + k - 1)], collapse = ""), "})")	
-					} else {
-						covariate <- paste0("(", covariate, ")")
-					}
-					
-					tex <- paste0(tex, paste0(greekCoef, covariate, collapse = ""), sep = sep) ## non-intercept covariate case.
-				} else{
-					tex <- paste0(tex, greekCoef, sep = sep) ## Intercept case, just append greek coefficient.
-				}
-			}
-			## If model has random effect specified, append it.
-			if(ranef){
-				tex <- paste0(tex, " + ", paste0(RESIDUALLETTERS[level], outcomeSubscript, collapse = ""))
-			}
-
-			texModelsList[[i]] <- paste0("$$", tex, "$$")
-		}
-		output[[paste0("level_", level, "_tex")]] <- renderUI({
-			lapply(texModelsList, function(x){
-				div(style="height: 65px;",
-					withMathJax(x)
-					)
-				})
-		})
-		return(texModelsList)
-	}
-
 	##----------------------------- FILE/DATA, UP-FRONT MODS TO MAKE ----------------------------##
 	
 	## LOAD IN DATA FILE.
@@ -436,25 +368,36 @@ shinyServer(function(input, output, session) {
 		## LEVEL k COVARIATE SELECTION, RANDOM EFFECT CHOICE
 		if(input$hlm_k >= 2){
 			MakeLevelUI(level = 2, 2==input$hlm_k) 	## Build UI to select level-k model.
+			l <- GatherModelsHLM()
+			# print(l$l)
+			WriteLevelLatex(l$l, input$hlm_k)
 		}
 	})
 	obs <- observeEvent(input$update_level_2, { 
 		## LEVEL k COVARIATE SELECTION, RANDOM EFFECT CHOICE
 		if(input$hlm_k >= 2){
 			MakeLevelUI(level = 3, 3==input$hlm_k) 	## Build UI to select level-k model.
+			l <- GatherModelsHLM()
+			print(l$l)
+			WriteLevelLatex(l$l, input$hlm_k)
 		}
 	})
 	obs <- observeEvent(input$update_level_3, { 
 		## LEVEL k COVARIATE SELECTION, RANDOM EFFECT CHOICE
 		if(input$hlm_k >= 2){
 			MakeLevelUI(level = 4, 4==input$hlm_k) 	## Build UI to select level-k model.
+			l <- GatherModelsHLM()
+			# print(l$l)
+			WriteLevelLatex(l$l, input$hlm_k)
 		}
 	})
-
+	# obs <- observe({print(names(input))})
+	obs <- observeEvent(input$browser, {browser()})
 
 	##----------------- GATHER MODEL SPECIFICATIONS BY LEVEL  ---------------##
 	
 	GatherModelsHLM <- function(){
+		print("running GatherModelsHLM...")
 		hlm_k <- input$hlm_k
 		modelMatrixCovariates <- NULL ## This vector to hold names of features to pull from grand set of all available features.
 
@@ -464,8 +407,8 @@ shinyServer(function(input, output, session) {
 		l[[1]][["covariates"]] <- input$level_1_model
 		l[[1]][["centering"]] <- vector(mode = "character", length = length(input$level_1_model))
 		l[[1]][["label"]] <- vector(mode = "character", length = length(input$level_1_model))
+		l[[1]][["outcome"]] <- paste0(input$outcome_var, "_{", paste0(letters[9:(9+hlm_k-1)], collapse = ""), "}")
 
-		modelLetter <- GREEKLETTERS[1]
 		coefLetters <- paste0(letters[(9+1):(9+hlm_k-1)], collapse = "")
 		shift <- "Intercept" %in% l[[1]][["covariates"]]	## shift will index coefficient subscripts depending on whether
 																				## we're modeling an intercept or not.
@@ -474,144 +417,171 @@ shinyServer(function(input, output, session) {
 			coefficientCovariate <- input$level_1_model[[i]]
 			l[[1]][["label"]][i] <- NA
 
-
 			if(grepl("Intercept", coefficientCovariate)){
 				l[[1]][["centering"]][i] <- NA
-				l[[1]][["label"]][i] <- paste0(modelLetter, "_{0", coefLetters, "}")
+				l[[1]][["covariates"]][i] <- "Intercept"
+				l[[1]][["label"]][i] <- paste0(GREEKLETTERS[1], "_{0", coefLetters, "}")
 				modelMatrixCovariates <- c(modelMatrixCovariates, "Intercept")
 			} else{
 				var__centering <- strsplit(coefficientCovariate, "__")[[1]]
-			}
-			if(grepl("__uncentered", coefficientCovariate)){
-				l[[1]][["covariates"]][i] <- var__centering[1]
-				l[[1]][["centering"]][i] <- var__centering[2]
-			}
-			if(grepl("__grand_centered", coefficientCovariate)){
-				l[[1]][["covariates"]][i] <- var__centering[1]
-				l[[1]][["centering"]][i] <- var__centering[2]
-			}
-			if(grepl("__group_centered", coefficientCovariate)){
 				l[[1]][["covariates"]][i] <- var__centering[1]
 				l[[1]][["centering"]][i] <- var__centering[2]
 			}
 			if(is.na(l[[1]][["label"]][i])){
-				l[[1]][["label"]][i] <- paste0(modelLetter, "_{", ifelse(shift, (i-1), i), coefLetters, "}")
+				l[[1]][["label"]][i] <- paste0(GREEKLETTERS[1], "_{", ifelse(shift, (i-1), i), coefLetters, "}")
 				modelMatrixCovariates <- c(modelMatrixCovariates, coefficientCovariate)
 			}
 		}
 
-		## GATHER COVARIATES AND CENTERING STATUS FOR SECOND (2nd) LEVEL MODELS.
-		for(i in c(1:length(l[[1]]$covariates))){
-			greekLabel <- l[[1]]$label[i]									## e.g. beta_{0jk}, or beta_{1jk}
-			subscript <- strsplit(greekLabel, split = "\\{")[[1]][2]		## Coefficient subscript
-
-			modelName <- paste0("level_2_model_", greekLabel) 	## Label this model by regression coefficient.
-			l[[2]][[modelName]] <- list()
-
-			## Gather random effects for level 2 coefficients.
-			randomEffects <- grep(paste0("level_2_randomEffect_", l[[1]]$covariates[i]), names(input), value = T) ## level_2_randomEffect_[covariate + centering label]
-			coefficientCovariates <- grep(paste0("level_2_model_", l[[1]]$covariates[i]), names(input), value = T)
-
-			if(length(randomEffects) > 0 & length(coefficientCovariates) > 0){
-				coefficientCovariates <- input[[coefficientCovariates]]
-				l[[2]][[modelName]]$randomEffects <- input[[randomEffects]] ## e.g. level_2_model_beta_{0j}$randomEffects <- input$level_2_randomEffect_Intercept
-
-				## Model, label, and describe the centering of the covariates of each of the level-1 coefficients:
-				l[[2]][[modelName]]$covariates <- vector(mode = "character", length = length(coefficientCovariates))
-				l[[2]][[modelName]]$label <- l[[2]][[modelName]]$covariates
-				l[[2]][[modelName]]$centering <- l[[2]][[modelName]]$covariates
-				shift <- "Intercept" %in% coefficientCovariates
-
-				## Go through this coefficient's model's coefficients.
-				for(j in c(1:length(coefficientCovariates))){
-					coefficientCovariate <- coefficientCovariates[j]
-
-					var__centering <- strsplit(coefficientCovariate, "__")[[1]]
-					l[[2]][[modelName]]$covariates[j] <- var__centering[1]
-
-					## Label coefficient covariates with greek letters with appropriate subscripts.
-					if(coefficientCovariate == "Intercept"){
-						l[[2]][[modelName]]$centering[j] <- NA
-						substr(subscript, 2, 2) <- "0"
-					} else{
-						substr(subscript, 2, 2) <- as.character(ifelse(shift, (j-1), j))
-						if(grepl("__uncentered", coefficientCovariate)){
-							l[[2]][[modelName]]$centering[j] <- var__centering[2]
-						}
-						if(grepl("__grand_centered", coefficientCovariate)){
-							l[[2]][[modelName]]$centering[j] <- var__centering[2]
-						}
-						if(grepl("__group_centered", coefficientCovariate)){
-							l[[2]][[modelName]]$centering[j] <- var__centering[2]
-						}
-						modelMatrixCovariates <- c(modelMatrixCovariates, coefficientCovariate)
-					}
-					l[[2]][[modelName]]$label[j] <- paste0(GREEKLETTERS[2], "_{", subscript) ## beta_{0jk} -> beta_{00k}
-				}
+		for(level in 2:hlm_k){
+		
+			if(level == 2){
+				numModels <- length(l[[1]]$covariates)
+			} else{
+				# pattern <- paste0("level_", (level-1), "_model_beta_\\{[0-9]{", (level-1), "}[jklmn]\\}")
+				pattern <- paste0("level_", level, "_model")
+				level_j_models <- grep(pattern, names(input), value = T)
+				numModels <- length(level_j_models)
 			}
-		}
 
-		## GATHER COVARIATES AND CENTERING STATUS FOR (k > 2)-LEVEL MODELS BASED ON (k-1)-LEVEL MODELS.
-		if(hlm_k >= 3){
-			for(i in c(3:hlm_k)){														## i == level we're gathering data on.
-				for(j in c(1:length(l[[(i-1)]]))){										## Iterate over different coefficients to model in level (i-1)
-					for(k in c(1:length(l[[(i-1)]][[j]]$covariates))){						## Iterate over different coefficients in 
+			if(numModels > 0){
+				for(i in 1:numModels){
+					
+					if(level == 2){
+						outcome <- l[[1]]$label[i]
+						modelName <- paste0("level_2_model_", outcome)
+					}
 
-						if(j > 1){browser()}
-						greekLabel <- l[[(i-1)]][[j]]$label[k]							## Greek label of coefficient in level (i-1) beta_{0jk}, or beta_{1jk}
-						subscript <- strsplit(greekLabel, split = "\\{")[[1]][2]		## Coefficient subscript
+					## outcome is the coefficient being modeled.
+					if(level > 2){
+						modelName <- level_j_models[i]
+						outcome <- strsplit(modelName, paste0("level_", level, "_model_"))[[1]][2] ## outcome is "greek letter + _{ subcript }"
+					}
 
-						modelName <- paste0("level_", i, "_model_", greekLabel)			## Name for model for particular coefficient in level (i-1) model.
-						l[[i]][[modelName]] <- list()
+					l[[level]][[modelName]] <- list()
+					l[[level]][[modelName]]$outcome <- outcome
+					coefficientLetter <- GREEKLETTERS[level]
+					coefficientSubscript <- strsplit(outcome, "_\\{")[[1]][2]
+          
+         			randomEffectName <- paste0("level_", level, "_randomEffect_", gsub("\\}", "\\\\}", gsub("\\{", "\\\\{", outcome)))
+          			UIHasBeenRendered <- length(grep(randomEffectName, names(input))) > 0
 
-						coefficientCovariates <- grep(paste0("level_", (i-1), "_model_", l[[(i-1)]][[j]]$covariates[k]), names(input), value = T)
-						randomEffects <- grep(paste0("level_", i, "_randomEffect_", l[[(i-1)]][[j]]$covariates[k]), names(input), value = T) ## level_2_randomEffect_[covariate + centering label]
-						
-						if(length(randomEffects) > 0 & length(coefficientCovariates) > 0){ ## Causes bugs when actual length is already 1, but user changes number models to > 1.
-							l[[i]][[modelName]]$randomEffects <- input[[randomEffects]]
+          			if(UIHasBeenRendered){
+            			l[[level]][[modelName]]$randomEffect <- input[[grep(randomEffectName, names(input), value = T)]]
 
-							## Model, label, and describe the centering of the covariates of each of the level-1 coefficients:
-							coefficientCovariates <- input[[coefficientCovariates]]
-							l[[i]][[modelName]]$covariates <- vector(mode = "character", length = length(coefficientCovariates))
-							l[[i]][[modelName]]$label <- l[[2]][[modelName]]$covariates
-							l[[i]][[modelName]]$centering <- l[[2]][[modelName]]$covariates
-							shift <- "Intercept" %in% coefficientCovariates
+  						## Gather up the user's choice 
+  						coefficientCovariates <- input[[modelName]]
+  						shift <- "Intercept" %in% coefficientCovariates
+  
+  						if(shift){
+  							coefficientCovariates <- c("Intercept", setdiff(coefficientCovariates, "Intercept"))
+  						}
+  						numCovar <- length(coefficientCovariates)
+  
+		  				l[[level]][[modelName]]$covariates <- vector(mode = "character", length = numCovar)
+		  				l[[level]][[modelName]]$label <- vector(mode = "character", length = numCovar)
+		  				l[[level]][[modelName]]$centering <- vector(mode = "character", length = numCovar)
+  
+							for(j in 1:numCovar){
+								coefficientCovariate <- coefficientCovariates[j]
 
-							## Go through this coefficient's model's coefficients.
-							for(m in c(1:length(coefficientCovariates))){
-								coefficientCovariate <- coefficientCovariates[m]
-
-								var__centering <- strsplit(coefficientCovariate, "__")[[1]]
-								l[[i]][[modelName]]$covariates[m] <- var__centering[1]
+  							var__centering <- strsplit(coefficientCovariate, "__")[[1]]
+  							l[[level]][[modelName]]$covariates[j] <- var__centering[1]
 
 								## Label coefficient covariates with greek letters with appropriate subscripts.
 								if(coefficientCovariate == "Intercept"){
-									l[[i]][[modelName]]$centering[m] <- NA
-									substr(subscript, i, i) <- "0"
+									l[[level]][[modelName]]$centering[j] <- NA
+									substr(coefficientSubscript, level, level) <- "0"
 								} else{
-									substr(subscript, i, i) <- as.character(ifelse(shift, (m-1), j))
-									if(grepl("__uncentered", coefficientCovariate)){
-										l[[i]][[modelName]]$centering[m] <- var__centering[2]
-									}
-									if(grepl("__grand_centered", coefficientCovariate)){
-										l[[i]][[modelName]]$centering[m] <- var__centering[2]
-									}
-									if(grepl("__group_centered", coefficientCovariate)){
-										l[[i]][[modelName]]$centering[m] <- var__centering[2]
-									}
-									modelMatrixCovariates <- c(modelMatrixCovariates, coefficientCovariate)
-								}
-								l[[i]][[modelName]]$label[m] <- paste0(GREEKLETTERS[i], "_{", subscript) ## beta_{0jk} -> beta_{00k}
+									l[[level]][[modelName]]$centering[j] <- var__centering[2]
+									substr(coefficientSubscript, level, level) <- as.character(ifelse(shift, (j-1), j))
+								}	
+								l[[level]][[modelName]][["label"]][j] <- paste0(coefficientLetter, "_{", coefficientSubscript)
+								modelMatrixCovariates <- c(modelMatrixCovariates, coefficientCovariate)					
 							}
+					} else{
+						## Remove current and higher up levels from our aggregation list because UI hasn't been rendered yet (user hasn't defined models yet)
+						while(length(l) >= level){
+							l[[length(l)]] <- NULL
 						}
+						break
 					}
 				}
+			} else{
+				while(length(l) >= level){
+					l[[length(l)]] <- NULL
+				}
+				break
 			}
 		}
-		# print("Finished assembling GatherModelsHLM list.")
+		print("Finished assembling GatherModelsHLM list.")
 		return(list(l = l, modelMatrixCovariates = unique(modelMatrixCovariates)))
 	}
 
-	##--------------------- RENDER MIXED/COMBINED MODEL  ------------------##
+	## Render the Latex strings representing each level's coefficient models.
+	WriteLevelLatex <- function(l, k){
+		numLevelsToRender <- length(l)
+
+		# if(any(unlist(lapply(l, length)) == 0)){browser()}
+
+		texModelsList <- list()
+		
+		for(level in 1:numLevelsToRender){
+			texModelsList[[level]] <- list()
+
+			numEquations <- ifelse(level == 1, 1, length(l[[level]]))
+
+			for(i in 1:numEquations){
+				if(level == 1){
+					model <- l[[level]]
+					ranef <- TRUE
+				} else{
+					model <- l[[level]][[i]]
+					ranef <- model$randomEffect
+				}
+
+				outcome <- ifelse(level == 1, model$outcome, paste0("\\", model$outcome))
+				tex <- paste0(outcome, " = ")
+
+				numCovar <- length(model$covariates)
+				for(j in 1:numCovar){
+					covariate <- model$covariates[j]
+					centering <- model$centering[j]
+					coef <- model$label[j]
+
+					sep <- ifelse(j == numCovar, "", " + ")
+					
+					if(!is.na(centering)){
+						if(centering == "grand_centered"){
+							covariate <- paste0("(", covariate, " - \\bar{", covariate, "}", "_{", paste0(rep("\\cdot", (k-(level-1))), collapse = ""), "})")
+						} else if(centering == "group_centered"){
+							covariate <- paste0("(", covariate, " - \\bar{", covariate, "}", "_{\\cdot ", paste0(letters[(9 + level):(9 + k - 1)], collapse = ""), "})")	
+						} else{
+							covariate <- paste0("(", covariate, ")")
+						}
+						tex <- paste0(tex, paste0("\\", coef, covariate, collapse = ""), sep = sep) ## non-intercept covariate case.
+					} else{
+						tex <- paste0(tex, paste0("\\", coef), sep = sep) ## Intercept case, just append greek coefficient.
+					}
+				}
+				if(ranef){
+					errSubscript <- strsplit(outcome, "_")[[1]][2]
+					tex <- paste0(tex, " + ", paste0(RESIDUALLETTERS[level], "_", errSubscript))
+				}
+				texModelsList[[level]][[i]] <- paste0("$$", tex, "$$")
+			}
+		}
+		print(texModelsList)
+		for(i in 1:numLevelsToRender){
+			equations <- texModelsList[[i]]
+			output[[paste0("level_", i, "_tex")]] <- renderUI({
+				lapply(equations, function(x){
+					div(style="height: 65px;",
+						withMathJax(x)
+					)
+				})
+			})
+		}
+	}
 
 })

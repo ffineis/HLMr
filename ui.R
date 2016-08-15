@@ -122,6 +122,7 @@ shinyUI(navbarPage("HLMr", theme = "bootstrap.css",
                   ,fluidRow(
                     column(12, uiOutput("level_3_tex"))
                   )
+                  # ,actionButton("browser", "Browser")
                 ),
                 conditionalPanel('input.select_level === "Level-4"',
                   tags$h3("Level 4 Model Selection"),
